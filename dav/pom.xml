@@ -78,6 +78,12 @@
       <artifactId>commons-logging</artifactId>
       <version>1.0.4</version>
     </dependency>
+    <dependency>
+      <groupId>org.sakaiproject.was</groupId>
+      <artifactId>was-login-module</artifactId>
+      <version>1.0</version>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
   <build>
     <resources/>

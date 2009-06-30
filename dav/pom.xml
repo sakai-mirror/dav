@@ -4,7 +4,7 @@
   <parent>
     <artifactId>dav-base</artifactId>
     <groupId>org.sakaiproject</groupId>
-    <version>2.6.0</version>
+    <version>2.6.0RC1-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
   <name>dav</name>
@@ -77,6 +77,12 @@
       <groupId>commons-logging</groupId>
       <artifactId>commons-logging</artifactId>
       <version>1.0.4</version>
+    </dependency>
+    <dependency>
+      <groupId>org.sakaiproject.was</groupId>
+      <artifactId>was-login-module</artifactId>
+      <version>1.0</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
   <build>

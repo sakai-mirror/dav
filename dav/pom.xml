@@ -53,6 +53,11 @@
       <version>${sakai.version}</version>
     </dependency>
     <dependency>
+   <groupId>org.sakaiproject</groupId>
+      <artifactId>sakai-tool-servlet</artifactId>
+      <version>${sakai.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.sakaiproject</groupId>
       <artifactId>sakai-user-api</artifactId>
       <version>${sakai.version}</version>

@@ -156,6 +156,7 @@ import org.sakaiproject.user.api.UserNotDefinedException;
 import org.sakaiproject.user.cover.AuthenticationManager;
 import org.sakaiproject.user.cover.UserDirectoryService;
 import org.sakaiproject.util.IdPwEvidence;
+import org.sakaiproject.util.RequestFilter;
 import org.sakaiproject.util.StringUtil;
 import org.sakaiproject.util.Validator;
 import org.w3c.dom.Document;
@@ -479,7 +480,12 @@ public class DavServlet extends HttpServlet
 	 * Array of file patterns we are not supposed to accept on PUT
 	 */
 	private String[] ignorePatterns = null;
-
+	
+	/**
+	 * Output cookies for DAV requests
+	 */
+	private boolean useCookies = false;
+	
 	// --------------------------------------------------------- Public Methods
 
 	/**
@@ -553,6 +559,9 @@ public class DavServlet extends HttpServlet
 			e.printStackTrace();
 			throw new IllegalStateException();
 		}
+		
+		// Check cookie configuration
+		useCookies = ServerConfigurationService.getBoolean("webdav.cookies", false);
 	}
 
 	/** create the info */
@@ -978,7 +987,12 @@ public class DavServlet extends HttpServlet
 
 				Authentication a = AuthenticationManager.authenticate(e);
 
-				if (!UsageSessionService.login(a, req))
+				// No need to log in again if UsageSession is not null, active, and the eid is the 
+				// same as that resulting from the DAV basic auth authentication
+				
+				if ((UsageSessionService.getSession() == null || UsageSessionService.getSession().isClosed()
+						|| !a.getEid().equals(UsageSessionService.getSession().getUserEid()))
+						&& !UsageSessionService.login(a, req))
 				{
 					// login failed
 					res.sendError(401);
@@ -999,6 +1013,15 @@ public class DavServlet extends HttpServlet
 			return;
 		}
 
+		// Set the client cookie if enabled as this is not done by the RequestFilter for dav requests.
+		// This is not required by DAV clients but may be helpful in some load-balancing
+		// configurations for session affinity across app servers. However, some Windows DAV clients
+		// share cookies with IE7 which can lead to confusing results in the browser session.
+		
+		if (useCookies) {
+			req.setAttribute(RequestFilter.ATTR_SET_COOKIE, true);
+		}
+		
 		// Setup... ?
 
 		try

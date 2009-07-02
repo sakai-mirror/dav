@@ -61,6 +61,12 @@
 			<artifactId>sakai-tool-api</artifactId>
 			<version>${sakai.version}</version>
 		</dependency>
+		
+		<dependency>
+			<groupId>sakaiproject</groupId>
+			<artifactId>sakai-tool-servlet</artifactId>
+			<version>${sakai.version}</version>
+		</dependency>
 
 		<dependency>
 			<groupId>sakaiproject</groupId>

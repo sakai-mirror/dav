@@ -105,7 +105,6 @@ import java.util.Stack;
 import java.util.TimeZone;
 import java.util.Vector;
 
-import javax.naming.NameClassPair;
 import javax.naming.NamingException;
 import javax.naming.directory.DirContext;
 import javax.servlet.ServletException;
@@ -173,6 +172,11 @@ import org.xml.sax.InputSource;
  */
 public class DavServlet extends HttpServlet
 {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
+
 	/** Our logger. */
 	private static Log M_log = LogFactory.getLog(DavServlet.class);
 
@@ -208,11 +212,6 @@ public class DavServlet extends HttpServlet
 	 * Default depth is infite.
 	 */
 	private static final int INFINITY = 3; // To limit tree browsing a bit
-
-	/**
-	 * The debugging detail level for this servlet.
-	 */
-	protected int debug = 0;
 
 	/**
 	 * PROPFIND - Specify a property mask.
@@ -441,7 +440,7 @@ public class DavServlet extends HttpServlet
 	 * Key : path <br>
 	 * Value : LockInfo
 	 */
-	private Hashtable resourceLocks = new Hashtable();
+	private Hashtable<String,LockInfo> resourceLocks = new Hashtable<String,LockInfo>();
 
 	/**
 	 * Repository of the lock-null resources.
@@ -449,7 +448,7 @@ public class DavServlet extends HttpServlet
 	 * Key : path of the collection containing the lock-null resource<br>
 	 * Value : Vector of lock-null resource which are members of the collection. Each element of the Vector is the path associated with the lock-null resource.
 	 */
-	private Hashtable lockNullResources = new Hashtable();
+	private Hashtable<String,Vector<String>> lockNullResources = new Hashtable<String,Vector<String>>();
 
 	/**
 	 * Vector of the heritable locks.
@@ -457,7 +456,7 @@ public class DavServlet extends HttpServlet
 	 * Key : path <br>
 	 * Value : LockInfo
 	 */
-	private Vector collectionLocks = new Vector();
+	private Vector<LockInfo> collectionLocks = new Vector<LockInfo>();
 
 	/**
 	 * Secret information used to generate reasonably secure lock ids.
@@ -502,15 +501,6 @@ public class DavServlet extends HttpServlet
 
 		// Set our properties from the initialization parameters
 		String value = null;
-		try
-		{
-			value = getServletConfig().getInitParameter("debug");
-			debug = Integer.parseInt(value);
-		}
-		catch (Throwable t)
-		{
-			;
-		}
 
 		try
 		{
@@ -588,10 +578,10 @@ public class DavServlet extends HttpServlet
 		}
 
 		/** construct from the req */
+		@SuppressWarnings("unchecked")
 		public SakaidavServletInfo(HttpServletRequest req)
 		{
 			m_options = new Properties();
-			String type = req.getContentType();
 
 			Enumeration e = req.getParameterNames();
 			while (e.hasMoreElements())
@@ -616,6 +606,7 @@ public class DavServlet extends HttpServlet
 		} // SakaidavServletInfo
 
 		/** return the m_options as a string */
+		@SuppressWarnings("unchecked")
 		public String optionsString()
 		{
 			StringBuilder buf = new StringBuilder(1024);
@@ -663,6 +654,7 @@ public class DavServlet extends HttpServlet
 	/**
 	 * Show HTTP header information.
 	 */
+	@SuppressWarnings("unchecked")
 	protected void showRequestInfo(HttpServletRequest req)
 	{
 
@@ -838,7 +830,6 @@ public class DavServlet extends HttpServlet
 		 */
 
 		int maxBytesPerChar = 10;
-		int caseDiff = ('a' - 'A');
 		StringBuilder rewrittenPath = new StringBuilder(path.length());
 		ByteArrayOutputStream buf = new ByteArrayOutputStream(maxBytesPerChar);
 		OutputStreamWriter writer = null;
@@ -956,6 +947,7 @@ public class DavServlet extends HttpServlet
 	 * @param res
 	 *        HttpServletResponse object back to the client
 	 */
+	@SuppressWarnings("unchecked")
 	protected void service(HttpServletRequest req, HttpServletResponse res) throws ServletException, java.io.IOException
 	{
 		SakaidavServletInfo info = newInfo(req);
@@ -1101,10 +1093,10 @@ public class DavServlet extends HttpServlet
 
 		String method = req.getMethod();
 
-		if (debug > 0)
+		if (M_log.isDebugEnabled())
 		{
 			String path = getRelativePath(req);
-			if (M_log.isDebugEnabled()) M_log.debug("SAKAIDAV doDispatch [" + method + "] " + path);
+			M_log.debug("SAKAIDAV doDispatch [" + method + "] " + path);
 		}
 
 		String remoteUser = req.getRemoteUser();
@@ -1302,10 +1294,9 @@ public class DavServlet extends HttpServlet
 		ResourceInfoSAKAI resourceInfo = new ResourceInfoSAKAI(path, resources);
 
 		boolean exists = true;
-		Object object = null;
 		try
 		{
-			object = resources.lookup(path);
+			resources.lookup(path);
 		}
 		catch (NamingException e)
 		{
@@ -1351,15 +1342,13 @@ public class DavServlet extends HttpServlet
 
 		private ContentCollection collection;
 
-		private boolean isRootCollection;
-
 		public Object lookup(String id) throws NamingException
 		{
+
 			path = id;
 
 			// resource or collection? check the properties (also finds bad id and checks permissions)
 			isCollection = false;
-			isRootCollection = false;
 			try
 			{
 				ResourceProperties props;
@@ -1380,9 +1369,7 @@ public class DavServlet extends HttpServlet
 
 				if (isCollection)
 				{
-					// if (M_log.isDebugEnabled()) M_log.debug("DirContextSAKAI.lookup getting collection");
 					collection = contentHostingService.getCollection(adjustId(path));
-					isRootCollection = contentHostingService.isRootCollection(adjustId(path));
 				}
 			}
 			catch (PermissionException e)
@@ -1411,37 +1398,29 @@ public class DavServlet extends HttpServlet
 				throw new NamingException();
 			}
 
-			// for resources
-
-			// if (M_log.isDebugEnabled()) M_log.debug("DirContextSAKAI.lookup is collection " + path);
-			// if (M_log.isDebugEnabled()) M_log.debug(" isCollection = " + isCollection);
-			// if (M_log.isDebugEnabled()) M_log.debug(" isRootCollection = " + isRootCollection);
 			return myDC;
 		}
 
-		public Iterator list(String id)
+		@SuppressWarnings("unchecked")
+		public Iterator<Entity> list(String id)
 		{
 			try
 			{
-				Object object = lookup(id);
+				lookup(id);
 			}
 			catch (Exception e)
 			{
 				return null;
 			}
 			if (M_log.isDebugEnabled()) M_log.debug("DirContextSAKAI.list getting collection members and iterator");
-			List members = collection.getMemberResources();
-			Iterator it = members.iterator();
+			List<Entity> members = collection.getMemberResources();
+			Iterator<Entity> it = members.iterator();
 			return it;
 		}
 	}
 
 	public class ResourceInfoSAKAI
 	{
-		private DirContextSAKAI resources;
-
-		private ResourceProperties props = null;
-
 		private String path;
 
 		public boolean collection;
@@ -1473,19 +1452,17 @@ public class DavServlet extends HttpServlet
 			path = our_path;
 			exists = false;
 
-			resources = parent_resources;
 			// if (M_log.isDebugEnabled()) M_log.debug("ResourceInfoSAKAI Constructor path = " + path);
 
 			// resource or collection? check the properties (also finds bad id and checks permissions)
 			collection = false;
 			try
 			{
-				ResourceProperties props;
 				Entity mbr;
 
 				path = fixDirPathSAKAI(path); // Add slash as necessary
 
-				props = contentHostingService.getProperties(adjustId(path));
+				ResourceProperties props = contentHostingService.getProperties(adjustId(path));
 
 				collection = props.getBooleanProperty(ResourceProperties.PROP_IS_COLLECTION);
 
@@ -1512,7 +1489,6 @@ public class DavServlet extends HttpServlet
 				if (M_log.isDebugEnabled()) M_log.debug("Path=" + path + " eTag=" + eTag);
 				creationDate = props.getTimeProperty(ResourceProperties.PROP_CREATION_DATE).getTime();
 				resourceLink = mbr.getUrl();
-				String resourceName = getResourceNameSAKAI(mbr);
 
 			}
 			catch (PermissionException e)
@@ -1539,12 +1515,6 @@ public class DavServlet extends HttpServlet
 			httpDate = getHttpDate(modificationDate);
 			if (creationDate == 0) creationDate = modificationDate;
 			date = modificationDate;
-			/*
-			 * if (M_log.isDebugEnabled()) M_log.debug("ResourceInfoSAKAI path="+path); if (M_log.isDebugEnabled()) M_log.debug(" collection=" + collection); if (M_log.isDebugEnabled()) M_log.debug(" length=" + length); if (M_log.isDebugEnabled())
-			 * M_log.debug(" ISOCreationDate=" + creationDate + " ISO= " + getISOCreationDate(creationDate)); if (M_log.isDebugEnabled()) M_log.debug(" ModificationDate=" + modificationDate + " ISO= " + getISOCreationDate(modificationDate)); if
-			 * (M_log.isDebugEnabled()) M_log.debug(" MIMEType=" + MIMEType); if (M_log.isDebugEnabled()) M_log.debug(" httpDate=" + httpDate); if (M_log.isDebugEnabled()) M_log.debug(" resourceName="+resourceName); if (M_log.isDebugEnabled())
-			 * M_log.debug(" resourceLink="+resourceLink); if (M_log.isDebugEnabled()) M_log.debug(" displayName=" + displayName);
-			 */			
 		}
 	}
 
@@ -1558,10 +1528,9 @@ public class DavServlet extends HttpServlet
 
 		String tmpPath = path;
 
-		ResourceProperties props;
 		try
 		{
-			props = contentHostingService.getProperties(adjustId(tmpPath));
+			contentHostingService.getProperties(adjustId(tmpPath));
 		}
 		catch (IdUnusedException e)
 		{
@@ -1570,7 +1539,7 @@ public class DavServlet extends HttpServlet
 				String newPath = tmpPath + "/";
 				try
 				{
-					props = contentHostingService.getProperties(adjustId(newPath));
+					contentHostingService.getProperties(adjustId(newPath));
 					tmpPath = newPath;
 				}
 				catch (Exception x)
@@ -1622,13 +1591,14 @@ public class DavServlet extends HttpServlet
 	}
 
 	// id is known to be a collection
+	@SuppressWarnings({ "unchecked", "deprecation" })
 	private void doDirectory(String id, HttpServletRequest req, HttpServletResponse res)
 	{
 		// OK, it's a collection and we can read it. Do a listing.
 		// System.out.println("got to final check");
 
-	        if (prohibited(id))
-		    return;
+		if (prohibited(id))
+			return;
 
 		String uri = req.getRequestURI();
 		PrintWriter out = null;
@@ -1660,15 +1630,14 @@ public class DavServlet extends HttpServlet
 				}
 			}
 
-			List xl = x.getMembers();
+			List<String> xl = x.getMembers();
 			Collections.sort(xl);
-			Iterator xi = xl.iterator();
+			Iterator<String> xi = xl.iterator();
 
 			res.setContentType("text/html; charset=UTF-8");
 
 			out = res.getWriter();
-			out
-					.println("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">");
+			out.println("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">");
 			out.println("<html><head>");
 			String webappRoot = ServerConfigurationService.getServerUrl();
 			out.println("<link href=\"" + webappRoot
@@ -1708,7 +1677,7 @@ public class DavServlet extends HttpServlet
 				if (xss.endsWith("/"))
 				{
 					ContentCollection nextres = contentHostingService.getCollection(adjustId(xs));
-					ResourceProperties properties = nextres.getProperties();
+					nextres.getProperties();
 					if (doProtected
 							&& xs.toLowerCase().indexOf("/protected") >= 0)
 					{
@@ -1896,10 +1865,6 @@ public class DavServlet extends HttpServlet
 		if (M_log.isDebugEnabled()) M_log.debug("getRelativePathSAKAI = " + path);
 		return path;
 
-		/*
-		 * String tmpPath = getRelativePath(req); // if (M_log.isDebugEnabled()) M_log.debug("getRelativePathSAKAI = " + tmpPath); // Remove the parent path if ( tmpPath.length() >= 4 ) { if(tmpPath.equalsIgnoreCase("/dav")) { tmpPath = "/"; } else if
-		 * (tmpPath.substring(0,4).equalsIgnoreCase("/dav") ) { tmpPath = "/" + tmpPath.substring(4); } // if (M_log.isDebugEnabled()) M_log.debug("New Relative Path = " + tmpPath); } return tmpPath;
-		 */
 	} // getRelativePathSAKAI
 
 	/**
@@ -1953,10 +1918,6 @@ public class DavServlet extends HttpServlet
 			}
 		 }
 	 
-		// if (M_log.isDebugEnabled()) M_log.debug("getResourceNameSAKAI resourceName="+resourceName);
-		// if (M_log.isDebugEnabled()) M_log.debug(" idx="+idx);
-		// if (M_log.isDebugEnabled()) M_log.debug(" displayName = " + props.getProperty(props.PROP_DISPLAY_NAME));
-
 		return resourceName;
 	}
 
@@ -1977,7 +1938,7 @@ public class DavServlet extends HttpServlet
 		}
 
 		// Properties which are to be displayed.
-		Vector properties = null;
+		Vector<String> properties = null;
 		// Propfind depth
 		int depth = INFINITY;
 		// Propfind type
@@ -2092,7 +2053,7 @@ public class DavServlet extends HttpServlet
 
 		if (type == FIND_BY_PROPERTY)
 		{
-			properties = new Vector();
+			properties = new Vector<String>();
 			NodeList childList = propNode.getChildNodes();
 
 			for (int i = 0; i < childList.getLength(); i++)
@@ -2133,10 +2094,9 @@ public class DavServlet extends HttpServlet
 		// Point the resource object at a particular path and catch the error if necessary.
 
 		boolean exists = true;
-		Object object = null;
 		try
 		{
-			object = resources.lookup(path);
+			resources.lookup(path);
 		}
 		catch (NamingException e)
 		{
@@ -2145,13 +2105,13 @@ public class DavServlet extends HttpServlet
 			if (slash != -1)
 			{
 				String parentPath = path.substring(0, slash);
-				Vector currentLockNullResources = (Vector) lockNullResources.get(parentPath);
+				Vector<String> currentLockNullResources = lockNullResources.get(parentPath);
 				if (currentLockNullResources != null)
 				{
-					Enumeration lockNullResourcesList = currentLockNullResources.elements();
+					Enumeration<String> lockNullResourcesList = currentLockNullResources.elements();
 					while (lockNullResourcesList.hasMoreElements())
 					{
-						String lockNullPath = (String) lockNullResourcesList.nextElement();
+						String lockNullPath = lockNullResourcesList.nextElement();
 						if (lockNullPath.equals(path))
 						{
 							resp.setStatus(SakaidavStatus.SC_MULTI_STATUS);
@@ -2193,11 +2153,11 @@ public class DavServlet extends HttpServlet
 		else
 		{
 			// The stack always contains the object of the current level
-			Stack stack = new Stack();
+			Stack<String> stack = new Stack<String>();
 			stack.push(path);
 
 			// Stack of the objects one level below
-			Stack stackBelow = new Stack();
+			Stack<String> stackBelow = new Stack<String>();
 
 			while ((!stack.isEmpty()) && (depth >= 0))
 			{
@@ -2207,7 +2167,7 @@ public class DavServlet extends HttpServlet
 				try
 				{
 					// if (M_log.isDebugEnabled()) M_log.debug("Lookup currentPath="+currentPath);
-					object = resources.lookup(currentPath);
+					resources.lookup(currentPath);
 				}
 				catch (NamingException e)
 				{
@@ -2219,7 +2179,7 @@ public class DavServlet extends HttpServlet
 				if ((resources.isCollection) && (depth > 0))
 				{
 
-					Iterator it = resources.list(currentPath);
+					Iterator<Entity> it = resources.list(currentPath);
 					while (it.hasNext())
 					{
 						Entity mbr = (Entity) it.next();
@@ -2237,10 +2197,10 @@ public class DavServlet extends HttpServlet
 					// collection
 					String lockPath = currentPath;
 					if (lockPath.endsWith("/")) lockPath = lockPath.substring(0, lockPath.length() - 1);
-					Vector currentLockNullResources = (Vector) lockNullResources.get(lockPath);
+					Vector<String> currentLockNullResources = lockNullResources.get(lockPath);
 					if (currentLockNullResources != null)
 					{
-						Enumeration lockNullResourcesList = currentLockNullResources.elements();
+						Enumeration<String> lockNullResourcesList = currentLockNullResources.elements();
 						while (lockNullResourcesList.hasMoreElements())
 						{
 							String lockNullPath = (String) lockNullResourcesList.nextElement();
@@ -2256,7 +2216,7 @@ public class DavServlet extends HttpServlet
 					depth--;
 					stack = stackBelow;
 
-					stackBelow = new Stack();
+					stackBelow = new Stack<String>();
 				}
 				// if (M_log.isDebugEnabled()) M_log.debug("SAKAIDAV.propfind() " + generatedXML.toString());
 				generatedXML.sendData();
@@ -2272,20 +2232,9 @@ public class DavServlet extends HttpServlet
 	/**
 	 * PROPPATCH Method.
 	 */
+	@SuppressWarnings("deprecation")
 	protected void doProppatch(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
 	{
-
-	    //		if (readOnly)
-	    //		{
-	    //			resp.sendError(SakaidavStatus.SC_FORBIDDEN);
-	    //			return;
-	    //		}
-
-	    //		if (isLocked(req))
-	    //		{
-	    //			resp.sendError(SakaidavStatus.SC_LOCKED);
-	    //			return;
-	    //		}
 
 	    // we can't actually do this, but MS requires us to. Say we did.
 	    // I'm trying to be as close to valid here, so I generate an OK
@@ -2368,7 +2317,6 @@ public class DavServlet extends HttpServlet
 	    }
 
 
-	    //		resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED);
 	    resp.setStatus(SakaidavStatus.SC_MULTI_STATUS);
 	    resp.setContentType("text/xml; charset=UTF-8");
 
@@ -2601,6 +2549,7 @@ public class DavServlet extends HttpServlet
 	 * @exception ServletException
 	 *            if a servlet-specified error occurs
 	 */
+	@SuppressWarnings("unchecked")
 	protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
 	{
 
@@ -2857,13 +2806,6 @@ public class DavServlet extends HttpServlet
 		{
 			deleteResource(path, req, resp);
 		}
-
-		/*
-		 * String destinationPath = getDestinationPath(req); if (destinationPath == null) { resp.sendError(SakaidavStatus.SC_BAD_REQUEST); return; } // path = fixDirPathSAKAI(path); destinationPath = fixDirPathSAKAI(destinationPath); //
-		 * System.out.println("doMove source="+path+" dest="+destinationPath); try { contentHostingService.rename(path,destinationPath); } catch (PermissionException e) { resp.sendError(SakaidavStatus.SC_BAD_REQUEST); return; } catch (InUseException e) {
-		 * resp.sendError(SakaidavStatus.SC_BAD_REQUEST); return; } catch (IdUnusedException e) { // Resource not found (this is actually the normal case) } catch (TypeException e) { M_log.warn("SAKAIDavServlet.doMove() - TypeException "+path);
-		 * resp.sendError(SakaidavStatus.SC_BAD_REQUEST); return; }
-		 */
 
 	}
 
@@ -3166,7 +3108,7 @@ public class DavServlet extends HttpServlet
 		}
 
 
-		Enumeration locksList = null;
+		Enumeration<LockInfo> locksList = null;
 
 		if (lockRequestType == LOCK_CREATION)
 		{
@@ -3184,7 +3126,7 @@ public class DavServlet extends HttpServlet
 
 				// Checking if a child resource of this collection is
 				// already locked
-				Vector lockPaths = new Vector();
+				Vector<String> lockPaths = new Vector<String>();
 				locksList = collectionLocks.elements();
 				while (locksList.hasMoreElements())
 				{
@@ -3222,7 +3164,7 @@ public class DavServlet extends HttpServlet
 					// One of the child paths was locked
 					// We generate a multistatus error report
 
-					Enumeration lockPathsList = lockPaths.elements();
+					Enumeration<String> lockPathsList = lockPaths.elements();
 
 					resp.setStatus(SakaidavStatus.SC_CONFLICT);
 
@@ -3342,10 +3284,10 @@ public class DavServlet extends HttpServlet
 						int slash = lock.path.lastIndexOf('/');
 						String parentPath = lock.path.substring(0, slash);
 
-						Vector lockNulls = (Vector) lockNullResources.get(parentPath);
+						Vector<String> lockNulls = lockNullResources.get(parentPath);
 						if (lockNulls == null)
 						{
-							lockNulls = new Vector();
+							lockNulls = new Vector<String>();
 							lockNullResources.put(parentPath, lockNulls);
 						}
 
@@ -3368,7 +3310,7 @@ public class DavServlet extends HttpServlet
 			// Checking resource locks
 
 			LockInfo toRenew = (LockInfo) resourceLocks.get(path);
-			Enumeration tokenList = null;
+			Enumeration<String> tokenList = null;
 			if (lock != null)
 			{
 
@@ -3389,10 +3331,10 @@ public class DavServlet extends HttpServlet
 
 			// Checking inheritable collection locks
 
-			Enumeration collectionLocksList = collectionLocks.elements();
+			Enumeration<LockInfo> collectionLocksList = collectionLocks.elements();
 			while (collectionLocksList.hasMoreElements())
 			{
-				toRenew = (LockInfo) collectionLocksList.nextElement();
+				toRenew = collectionLocksList.nextElement();
 				if (path.equals(toRenew.path))
 				{
 
@@ -3490,7 +3432,7 @@ public class DavServlet extends HttpServlet
 		// Checking resource locks
 
 		LockInfo lock = (LockInfo) resourceLocks.get(path);
-		Enumeration tokenList = null;
+		Enumeration<String> tokenList = null;
 		if (lock != null)
 		{
 
@@ -3517,7 +3459,7 @@ public class DavServlet extends HttpServlet
 
 		// Checking inheritable collection locks
 
-		Enumeration collectionLocksList = collectionLocks.elements();
+		Enumeration<LockInfo> collectionLocksList = collectionLocks.elements();
 		while (collectionLocksList.hasMoreElements())
 		{
 			lock = (LockInfo) collectionLocksList.nextElement();
@@ -3596,7 +3538,7 @@ public class DavServlet extends HttpServlet
 		// Checking resource locks
 
 		LockInfo lock = (LockInfo) resourceLocks.get(path);
-		Enumeration tokenList = null;
+		Enumeration<String> tokenList = null;
 		if ((lock != null) && (lock.hasExpired()))
 		{
 			resourceLocks.remove(path);
@@ -3619,10 +3561,10 @@ public class DavServlet extends HttpServlet
 
 		// Checking inheritable collection locks
 
-		Enumeration collectionLocksList = collectionLocks.elements();
+		Enumeration<LockInfo> collectionLocksList = collectionLocks.elements();
 		while (collectionLocksList.hasMoreElements())
 		{
-			lock = (LockInfo) collectionLocksList.nextElement();
+			lock = collectionLocksList.nextElement();
 			if (lock.hasExpired())
 			{
 				collectionLocks.removeElement(lock);
@@ -3726,7 +3668,8 @@ public class DavServlet extends HttpServlet
 
 	} // getDestinationPath
 
-    private ResourcePropertiesEdit duplicateResourceProperties(ResourceProperties properties, String id) {
+    @SuppressWarnings("unchecked")
+	private ResourcePropertiesEdit duplicateResourceProperties(ResourceProperties properties, String id) {
 
 	ResourcePropertiesEdit resourceProperties = contentHostingService.newResourceProperties();
 	try {
@@ -3734,9 +3677,9 @@ public class DavServlet extends HttpServlet
 	    if (properties == null) return resourceProperties;
 
 	    // loop throuh the properties
-	    Iterator propertyNames = properties.getPropertyNames();
+	    Iterator<String> propertyNames = properties.getPropertyNames();
 	    while (propertyNames.hasNext()) {
-		String propertyName = (String) propertyNames.next();
+		String propertyName = propertyNames.next();
 		if (!propertyName.equals(ResourceProperties.PROP_DISPLAY_NAME))
 		    resourceProperties.addProperty(propertyName, properties.getProperty(propertyName));
 	    }
@@ -3755,7 +3698,8 @@ public class DavServlet extends HttpServlet
     // code. There are two problems; (1) copyIntoFolder will add .bin when there is no extension (2) it
     // doesn't check for "/protected"  The current code is the minimum necessary to support OS X.
 
-    private void copyCollection(String id, String new_id) 
+    @SuppressWarnings({ "deprecation", "unchecked" })
+	private void copyCollection(String id, String new_id) 
 	throws IdUnusedException, PermissionException, TypeException, IdUnusedException, IdLengthException, IdUsedException, IdUniquenessException, IdInvalidException, InUseException, InconsistentException, OverQuotaException, ServerOverloadException {
 
 	if (!id.endsWith("/"))
@@ -3767,7 +3711,7 @@ public class DavServlet extends HttpServlet
 
 	ContentCollection thisCollection = contentHostingService.getCollection(id);
 
-	List members = thisCollection.getMembers();
+	List<String> members = thisCollection.getMembers();
 	 
 	ResourceProperties properties = thisCollection.getProperties();
 	ResourcePropertiesEdit newProps = duplicateResourceProperties(properties, thisCollection.getId());
@@ -3780,9 +3724,9 @@ public class DavServlet extends HttpServlet
 	    name = name.substring(i+1);
 	newProps.addProperty(ResourceProperties.PROP_DISPLAY_NAME, name);
 
-	ContentCollection newCollection = contentHostingService.addCollection(new_id, newProps);
+	contentHostingService.addCollection(new_id, newProps);
 
-	Iterator memberIt = members.iterator();
+	Iterator<String> memberIt = members.iterator();
 	while (memberIt.hasNext()) {
 	    String member_id = (String) memberIt.next();
 
@@ -3815,7 +3759,7 @@ public class DavServlet extends HttpServlet
 			return false;
 		}
 
-		if (debug > 0) if (M_log.isDebugEnabled()) M_log.debug("Dest path :" + destinationPath);
+		if (M_log.isDebugEnabled()) M_log.debug("Dest path :" + destinationPath);
 
 		if ((destinationPath.toUpperCase().startsWith("/WEB-INF")) || (destinationPath.toUpperCase().startsWith("/META-INF")))
 		{
@@ -3909,6 +3853,25 @@ public class DavServlet extends HttpServlet
 
 		}
 
+		// Check to see if the parent collection of the destination exists. ContentHosting 
+		// will create a parent folder if it does not exist, but the WebDAV spec requires 
+		// this operation to fail (rfc2518, 8.3.1).
+		
+		String destParentId = isolateContainingId(adjustId(destinationPath));
+		
+		try {
+			contentHostingService.getCollection(destParentId);
+		} catch (IdUnusedException e1) {
+			resp.sendError(SakaidavStatus.SC_CONFLICT);
+			return false;		
+		} catch (TypeException e1) {
+			resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return false;						
+		} catch (PermissionException e1) {
+			resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return false;			
+		}
+		
 		// Copying source to destination
 
 		Hashtable<String,Integer> errorList = new Hashtable<String,Integer>();
@@ -3927,6 +3890,11 @@ public class DavServlet extends HttpServlet
 		// the destination path
 		lockNullResources.remove(destinationPath);
 
+		if (overwrite)
+			resp.setStatus(SakaidavStatus.SC_NO_CONTENT);
+		else
+			resp.setStatus(SakaidavStatus.SC_CREATED);
+				
 		return true;
 	}
 
@@ -3945,33 +3913,35 @@ public class DavServlet extends HttpServlet
 	private boolean copyResource(DirContextSAKAI resources, Hashtable<String,Integer> errorList, String source, String dest)
 	{
 
-		if (debug > 1) if (M_log.isDebugEnabled()) M_log.debug("Copy: " + source + " To: " + dest);
+		if (M_log.isDebugEnabled()) M_log.debug("Copy: " + source + " To: " + dest);
 
 		source = fixDirPathSAKAI(source);
 		dest = fixDirPathSAKAI(dest);
-
-		// System.out.println("copyResource source="+source+" dest="+dest);
 
 		if (prohibited(source) || prohibited(dest)) {
 		    errorList.put(source, new Integer(SakaidavStatus.SC_FORBIDDEN));
 		    return false;
 		}
-
+		
 		source = adjustId(source);
 		dest = adjustId(dest);
 
+		// Copy
+		
 		try
 		{
 		    boolean isCollection = contentHostingService.getProperties(source).getBooleanProperty(ResourceProperties.PROP_IS_COLLECTION);
 
-		    if (isCollection)
-			copyCollection(adjustId(source), adjustId(dest));
-		    else
-			contentHostingService.copy(adjustId(source), adjustId(dest));
+		    if (isCollection) {
+		    	copyCollection(source, dest);
+		    }
+		    else {
+		    	contentHostingService.copy(source, dest);
+		    }
 		}
 		catch (EntityPropertyNotDefinedException e)
 		{
-		    //	System.out.println("propnotdef " + e);
+		    // System.out.println("propnotdef " + e);
 		    errorList.put(source, new Integer(SakaidavStatus.SC_INTERNAL_SERVER_ERROR));
 		    return false;
 		}
@@ -4160,92 +4130,6 @@ public class DavServlet extends HttpServlet
 	}
 
 	/**
-	 * Deletes a collection.
-	 * 
-	 * @param resources
-	 *        Resources implementation associated with the context
-	 * @param path
-	 *        Path to the collection to be deleted
-	 * @param errorList
-	 *        Contains the list of the errors which occurred
-	 */
-	private void deleteCollection(HttpServletRequest req, DirContext resources, String path, Hashtable errorList)
-	{
-
-		if (debug > 1) if (M_log.isDebugEnabled()) M_log.debug("deleteCollection:" + path);
-
-		if (prohibited(path) || (path.toUpperCase().startsWith("/WEB-INF")) || (path.toUpperCase().startsWith("/META-INF")))
-		{
-			errorList.put(path, new Integer(SakaidavStatus.SC_FORBIDDEN));
-			return;
-		}
-
-		String ifHeader = req.getHeader("If");
-		if (ifHeader == null) ifHeader = "";
-
-		String lockTokenHeader = req.getHeader("Lock-Token");
-		if (lockTokenHeader == null) lockTokenHeader = "";
-
-		Enumeration enumer = null;
-		try
-		{
-			enumer = resources.list(path);
-		}
-		catch (NamingException e)
-		{
-			errorList.put(path, new Integer(SakaidavStatus.SC_INTERNAL_SERVER_ERROR));
-			return;
-		}
-
-		while (enumer.hasMoreElements())
-		{
-			NameClassPair ncPair = (NameClassPair) enumer.nextElement();
-			String childName = path;
-			if (!childName.equals("/")) childName += "/";
-			childName += ncPair.getName();
-
-			if (isLocked(childName, ifHeader + lockTokenHeader))
-			{
-
-				errorList.put(childName, new Integer(SakaidavStatus.SC_LOCKED));
-
-			}
-			else
-			{
-
-				try
-				{
-					Object object = resources.lookup(childName);
-					if (object instanceof DirContext)
-					{
-						deleteCollection(req, resources, childName, errorList);
-					}
-
-					try
-					{
-						resources.unbind(childName);
-					}
-					catch (NamingException e)
-					{
-						if (!(object instanceof DirContext))
-						{
-							// If it's not a collection, then it's an unknown
-							// error
-							errorList.put(childName, new Integer(SakaidavStatus.SC_INTERNAL_SERVER_ERROR));
-						}
-					}
-				}
-				catch (NamingException e)
-				{
-					errorList.put(childName, new Integer(SakaidavStatus.SC_INTERNAL_SERVER_ERROR));
-				}
-			}
-
-		}
-
-	}
-
-	/**
 	 * Send a multistatus element containing a complete error report to the client.
 	 * 
 	 * @param req
@@ -4255,7 +4139,7 @@ public class DavServlet extends HttpServlet
 	 * @param errorList
 	 *        List of error to be displayed
 	 */
-	private void sendReport(HttpServletRequest req, HttpServletResponse resp, Hashtable errorList) throws ServletException,
+	private void sendReport(HttpServletRequest req, HttpServletResponse resp, Hashtable<String,Integer> errorList) throws ServletException,
 			IOException
 	{
 
@@ -4263,17 +4147,17 @@ public class DavServlet extends HttpServlet
 
 		String absoluteUri = req.getRequestURI();
 		String relativePath = getRelativePath(req);
-
+		
 		XMLWriter generatedXML = new XMLWriter();
 		generatedXML.writeXMLHeader();
 
 		generatedXML.writeElement("D", "multistatus" + generateNamespaceDeclarations(), XMLWriter.OPENING);
 
-		Enumeration pathList = errorList.keys();
+		Enumeration<String> pathList = errorList.keys();
 		while (pathList.hasMoreElements())
 		{
 
-			String errorPath = (String) pathList.nextElement();
+			String errorPath = pathList.nextElement();
 			int errorCode = ((Integer) errorList.get(errorPath)).intValue();
 
 			generatedXML.writeElement("D", "response", XMLWriter.OPENING);
@@ -4314,7 +4198,7 @@ public class DavServlet extends HttpServlet
 	 *        If the propfind type is find properties by name, then this Vector contains those properties
 	 */
 	private void parseProperties(HttpServletRequest req, DirContextSAKAI resources, XMLWriter generatedXML, String path, int type,
-			Vector propertiesVector)
+			Vector<String> propertiesVector)
 	{
 		// Exclude any resource in the /WEB-INF and /META-INF subdirectories
 		// (the "toUpperCase()" avoids problems on Windows systems)
@@ -4430,14 +4314,14 @@ public class DavServlet extends HttpServlet
 
 			case FIND_BY_PROPERTY:
 
-				Vector propertiesNotFound = new Vector();
+				Vector<String> propertiesNotFound = new Vector<String>();
 
 				// Parse the list of properties
 
 				generatedXML.writeElement("D", "propstat", XMLWriter.OPENING);
 				generatedXML.writeElement("D", "prop", XMLWriter.OPENING);
 
-				Enumeration properties = propertiesVector.elements();
+				Enumeration<String> properties = propertiesVector.elements();
 
 				while (properties.hasMoreElements())
 				{
@@ -4559,7 +4443,7 @@ public class DavServlet extends HttpServlet
 				generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
 				generatedXML.writeElement("D", "propstat", XMLWriter.CLOSING);
 
-				Enumeration propertiesNotFoundList = propertiesNotFound.elements();
+				Enumeration<String> propertiesNotFoundList = propertiesNotFound.elements();
 
 				if (propertiesNotFoundList.hasMoreElements())
 				{
@@ -4604,7 +4488,7 @@ public class DavServlet extends HttpServlet
 	 *        If the propfind type is find properties by name, then this Vector contains those properties
 	 */
 	private void parseLockNullProperties(HttpServletRequest req, XMLWriter generatedXML, String path, int type,
-			Vector propertiesVector)
+			Vector<String> propertiesVector)
 	{
 
 		// Exclude any resource in the /WEB-INF and /META-INF subdirectories
@@ -4699,19 +4583,19 @@ public class DavServlet extends HttpServlet
 
 			case FIND_BY_PROPERTY:
 
-				Vector propertiesNotFound = new Vector();
+				Vector<String> propertiesNotFound = new Vector<String>();
 
 				// Parse the list of properties
 
 				generatedXML.writeElement("D", "propstat", XMLWriter.OPENING);
 				generatedXML.writeElement("D", "prop", XMLWriter.OPENING);
 
-				Enumeration properties = propertiesVector.elements();
+				Enumeration<String> properties = propertiesVector.elements();
 
 				while (properties.hasMoreElements())
 				{
 
-					String property = (String) properties.nextElement();
+					String property = properties.nextElement();
 
 					if (property.equals("creationdate"))
 					{
@@ -4779,7 +4663,7 @@ public class DavServlet extends HttpServlet
 				generatedXML.writeElement("D", "status", XMLWriter.CLOSING);
 				generatedXML.writeElement("D", "propstat", XMLWriter.CLOSING);
 
-				Enumeration propertiesNotFoundList = propertiesNotFound.elements();
+				Enumeration<String> propertiesNotFoundList = propertiesNotFound.elements();
 
 				if (propertiesNotFoundList.hasMoreElements())
 				{
@@ -4824,7 +4708,7 @@ public class DavServlet extends HttpServlet
 	{
 
 		LockInfo resourceLock = (LockInfo) resourceLocks.get(path);
-		Enumeration collectionLocksList = collectionLocks.elements();
+		Enumeration<LockInfo> collectionLocksList = collectionLocks.elements();
 
 		boolean wroteStart = false;
 
@@ -4916,7 +4800,7 @@ public class DavServlet extends HttpServlet
 
 		String owner = "";
 
-		Vector tokens = new Vector();
+		Vector<String> tokens = new Vector<String>();
 
 		long expiresAt = 0;
 
@@ -4935,7 +4819,7 @@ public class DavServlet extends HttpServlet
 			result += "Depth:" + depth + "\n";
 			result += "Owner:" + owner + "\n";
 			result += "Expiration:" + dateFormats()[0].format(new Date(expiresAt)) + "\n";
-			Enumeration tokensList = tokens.elements();
+			Enumeration<String> tokensList = tokens.elements();
 			while (tokensList.hasMoreElements())
 			{
 				result += "Token:" + tokensList.nextElement() + "\n";
@@ -5016,7 +4900,7 @@ public class DavServlet extends HttpServlet
 			generatedXML.writeElement("D", "locktoken", XMLWriter.OPENING);
 			if (showToken)
 			{
-				Enumeration tokensList = tokens.elements();
+				Enumeration<String> tokensList = tokens.elements();
 				while (tokensList.hasMoreElements())
 				{
 					generatedXML.writeElement("D", "href", XMLWriter.OPENING);
@@ -5038,23 +4922,6 @@ public class DavServlet extends HttpServlet
 
 	}
 
-	// --------------------------------------------------- Property Inner Class
-
-	private class Property
-	{
-
-		public String name;
-
-		public String value;
-
-		public String namespace;
-
-		public String namespaceAbbrev;
-
-		public int status = SakaidavStatus.SC_OK;
-
-	}
-
 };
 
 // -------------------------------------------------------- SakaidavStatus Class
@@ -5073,7 +4940,7 @@ class SakaidavStatus
 	/**
 	 * This Hashtable contains the mapping of HTTP and Sakaidav status codes to descriptive text. This is a static variable.
 	 */
-	private static Hashtable mapStatusCodes = new Hashtable();
+	private static Hashtable<Integer,String> mapStatusCodes = new Hashtable<Integer,String>();
 
 	// ------------------------------------------------------ HTTP Status Codes
 
@@ -5271,7 +5138,7 @@ class SakaidavStatus
 		}
 		else
 		{
-			return (String) mapStatusCodes.get(intKey);
+			return mapStatusCodes.get(intKey);
 		}
 	}
 

@@ -27,12 +27,12 @@
     <dependency>
       <groupId>tomcat</groupId>
       <artifactId>catalina</artifactId>
-      <version>${sakai.tomcat.version}</version>
+      <version>tomcat-${sakai.tomcat.version}</version>
     </dependency>
     <dependency>
       <groupId>tomcat</groupId>
       <artifactId>jmx</artifactId>
-      <version>${sakai.tomcat.version}</version>
+      <version>tomcat-${sakai.tomcat.version}</version>
     </dependency>
     <dependency>
       <groupId>commons-logging</groupId>

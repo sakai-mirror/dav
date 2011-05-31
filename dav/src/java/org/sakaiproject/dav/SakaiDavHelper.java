@@ -127,6 +127,73 @@ public class SakaiDavHelper  {
 		return id;
 	}
 	
+	
+	protected String justName(String str)
+	{
+		try
+		{
+			// Note: there may be a trailing separator
+			int pos = str.lastIndexOf("/", str.length() - 2);
+			String rv = str.substring(pos + 1);
+			if (rv.endsWith("/"))
+			{
+				rv = rv.substring(0, rv.length() - 1);
+			}
+			return rv;
+		}
+		catch (Throwable t)
+		{
+			return str;
+		}
+	}
+	
+	protected String normalize(String path)
+	{
+		if (path == null) return null;
+
+		// Create a place for the normalized path
+		String normalized = path;
+
+		/*
+		 * Commented out -- already URL-decoded in StandardContextMapper Decoding twice leaves the container vulnerable to %25 --> '%' attacks. if (normalized.indexOf('%') >= 0) normalized = RequestUtil.URLDecode(normalized, "UTF8");
+		 */
+
+		if (normalized.equals("/.")) return "/";
+
+		// Normalize the slashes and add leading slash if necessary
+		if (normalized.indexOf('\\') >= 0) normalized = normalized.replace('\\', '/');
+		if (!normalized.startsWith("/")) normalized = "/" + normalized;
+
+		// Resolve occurrences of "//" in the normalized path
+		while (true)
+		{
+			int index = normalized.indexOf("//");
+			if (index < 0) break;
+			normalized = normalized.substring(0, index) + normalized.substring(index + 1);
+		}
+
+		// Resolve occurrences of "/./" in the normalized path
+		while (true)
+		{
+			int index = normalized.indexOf("/./");
+			if (index < 0) break;
+			normalized = normalized.substring(0, index) + normalized.substring(index + 2);
+		}
+
+		// Resolve occurrences of "/../" in the normalized path
+		while (true)
+		{
+			int index = normalized.indexOf("/../");
+			if (index < 0) break;
+			if (index == 0) return (null); // Trying to go outside our context
+			int index2 = normalized.lastIndexOf('/', index - 1);
+			normalized = normalized.substring(0, index2) + normalized.substring(index + 3);
+		}
+
+		// Return the normalized path that we have completed
+		return (normalized);
+
+	}
 	protected SimpleDateFormat creationDateFormat()
 	{
 		final SimpleDateFormat creationDateFormat = new SimpleDateFormat(

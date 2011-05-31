@@ -81,6 +81,10 @@ import org.xml.sax.SAXParseException;
 public class SakaiFolderResource  implements FolderResource {
 	private static Log M_log = LogFactory.getLog(SakaiFolderResource.class);
 	private ContentHostingService contentHostingService;
+	private SakaiDavHelper sakaiDavHelper;
+	public SakaiFolderResource(){
+		sakaiDavHelper=new SakaiDavHelper();
+	}
 	public CollectionResource createCollection(String path)
 			throws NotAuthorizedException, ConflictException,
 			BadRequestException {
@@ -100,7 +104,7 @@ public class SakaiFolderResource  implements FolderResource {
 			return null;
 		}
 
-		String name = justName(path);//we have just name
+		String name = sakaiDavHelper.justName(path);//we have just name
 
 		if ((name.toUpperCase().startsWith("/WEB-INF")) || (name.toUpperCase().startsWith("/META-INF")))
 		{
@@ -111,7 +115,7 @@ public class SakaiFolderResource  implements FolderResource {
 		// Check to see if the parent collection exists. ContentHosting will create a parent folder if it 
 		// does not exist, but the WebDAV spec requires this operation to fail (rfc2518, 8.3.1).
 		
-		String parentId = isolateContainingId(adjustId(path));//we have parentid
+		String parentId = isolateContainingId(sakaiDavHelper.adjustId(path));//we have parentid
 		
 		try {
 			contentHostingService.getCollection(parentId);//we have this too
@@ -126,7 +130,7 @@ public class SakaiFolderResource  implements FolderResource {
 			return null;			
 		}
 		
-		String adjustedId = adjustId(path);//we have adjusted id 
+		String adjustedId = sakaiDavHelper.adjustId(path);//we have adjusted id 
 	//How to work with the response object
 		// Check to see if collection with this name already exists
 		try
@@ -177,7 +181,7 @@ public class SakaiFolderResource  implements FolderResource {
 
 		try
 		{
-			ContentCollectionEdit edit = contentHostingService.addCollection(adjustId(path));
+			ContentCollectionEdit edit = contentHostingService.addCollection(sakaiDavHelper.adjustId(path));
 			ResourcePropertiesEdit resourceProperties = edit.getPropertiesEdit();
 			resourceProperties.addProperty(ResourceProperties.PROP_DISPLAY_NAME, name);
 			contentHostingService.commitCollection(edit);
@@ -209,10 +213,10 @@ public class SakaiFolderResource  implements FolderResource {
 		// TODO Auto-generated method stub
 		return null;
 	}
-	private String adjustId(String path) {
+	/*private String adjustId(String path) {
 		// TODO Auto-generated method stub
 		return null;
-	}
+	}*/
 	private boolean prohibited(String path) {
 		// TODO Auto-generated method stub
 		return false;
@@ -253,71 +257,8 @@ public class SakaiFolderResource  implements FolderResource {
 		return path;
 
 	}*/
-	protected String normalize(String path)
-	{
-		if (path == null) return null;
-
-		// Create a place for the normalized path
-		String normalized = path;
-
-		/*
-		 * Commented out -- already URL-decoded in StandardContextMapper Decoding twice leaves the container vulnerable to %25 --> '%' attacks. if (normalized.indexOf('%') >= 0) normalized = RequestUtil.URLDecode(normalized, "UTF8");
-		 */
-
-		if (normalized.equals("/.")) return "/";
-
-		// Normalize the slashes and add leading slash if necessary
-		if (normalized.indexOf('\\') >= 0) normalized = normalized.replace('\\', '/');
-		if (!normalized.startsWith("/")) normalized = "/" + normalized;
-
-		// Resolve occurrences of "//" in the normalized path
-		while (true)
-		{
-			int index = normalized.indexOf("//");
-			if (index < 0) break;
-			normalized = normalized.substring(0, index) + normalized.substring(index + 1);
-		}
-
-		// Resolve occurrences of "/./" in the normalized path
-		while (true)
-		{
-			int index = normalized.indexOf("/./");
-			if (index < 0) break;
-			normalized = normalized.substring(0, index) + normalized.substring(index + 2);
-		}
-
-		// Resolve occurrences of "/../" in the normalized path
-		while (true)
-		{
-			int index = normalized.indexOf("/../");
-			if (index < 0) break;
-			if (index == 0) return (null); // Trying to go outside our context
-			int index2 = normalized.lastIndexOf('/', index - 1);
-			normalized = normalized.substring(0, index2) + normalized.substring(index + 3);
-		}
-
-		// Return the normalized path that we have completed
-		return (normalized);
-
-	}
-	protected String justName(String str)
-	{
-		try
-		{
-			// Note: there may be a trailing separator
-			int pos = str.lastIndexOf("/", str.length() - 2);
-			String rv = str.substring(pos + 1);
-			if (rv.endsWith("/"))
-			{
-				rv = rv.substring(0, rv.length() - 1);
-			}
-			return rv;
-		}
-		catch (Throwable t)
-		{
-			return str;
-		}
-	}
+	
+	
 	private String isolateContainingId(String id)
 	{
 		// take up to including the last resource path separator, not counting one at the very end if there

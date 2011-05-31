@@ -17,16 +17,313 @@ import com.bradmcevoy.http.Resource;
 import com.bradmcevoy.http.exceptions.BadRequestException;
 import com.bradmcevoy.http.exceptions.ConflictException;
 import com.bradmcevoy.http.exceptions.NotAuthorizedException;
+import com.bradmcevoy.http.HttpManager;
 
-public class SakaiFolderResource implements FolderResource{
+import javax.naming.NamingException;
+import javax.naming.directory.DirContext;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import org.apache.catalina.util.DOMWriter;
+import org.apache.catalina.util.MD5Encoder;
+import org.apache.catalina.util.RequestUtil;
+import org.apache.catalina.util.XMLWriter;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.sakaiproject.component.cover.ComponentManager;
+import org.sakaiproject.component.cover.ServerConfigurationService;
+import org.sakaiproject.content.api.ContentCollection;
+import org.sakaiproject.content.api.ContentCollectionEdit;
+import org.sakaiproject.content.api.ContentHostingService;
+import org.sakaiproject.content.api.ContentResource;
+import org.sakaiproject.content.api.ContentResourceEdit;
+import org.sakaiproject.entity.api.Entity;
+import org.sakaiproject.entity.api.EntityPropertyNotDefinedException;
+import org.sakaiproject.entity.api.EntityPropertyTypeException;
+import org.sakaiproject.entity.api.ResourceProperties;
+import org.sakaiproject.entity.api.ResourcePropertiesEdit;
+import org.sakaiproject.event.api.NotificationService;
+import org.sakaiproject.event.cover.UsageSessionService;
+import org.sakaiproject.exception.IdInvalidException;
+import org.sakaiproject.exception.IdUnusedException;
+import org.sakaiproject.exception.IdLengthException;
+import org.sakaiproject.exception.IdUniquenessException;
+import org.sakaiproject.exception.IdUsedException;
+import org.sakaiproject.exception.InUseException;
+import org.sakaiproject.exception.InconsistentException;
+import org.sakaiproject.exception.OverQuotaException;
+import org.sakaiproject.exception.PermissionException;
+import org.sakaiproject.exception.ServerOverloadException;
+import org.sakaiproject.exception.TypeException;
+import org.sakaiproject.time.api.Time;
+import org.sakaiproject.time.api.TimeBreakdown;
+import org.sakaiproject.time.cover.TimeService;
+import org.sakaiproject.user.api.Authentication;
+import org.sakaiproject.user.api.AuthenticationException;
+import org.sakaiproject.user.api.Evidence;
+import org.sakaiproject.user.api.User;
+import org.sakaiproject.user.api.UserNotDefinedException;
+import org.sakaiproject.user.cover.AuthenticationManager;
+import org.sakaiproject.user.cover.UserDirectoryService;
+import org.sakaiproject.util.IdPwEvidence;
+import org.sakaiproject.util.RequestFilter;
+import org.sakaiproject.util.StringUtil;
+import org.sakaiproject.util.Validator;
+import org.sakaiproject.was.login.SakaiWASLoginModule;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXParseException;
 
-	public CollectionResource createCollection(String arg0)
+public class SakaiFolderResource  implements FolderResource {
+	private static Log M_log = LogFactory.getLog(SakaiFolderResource.class);
+	private ContentHostingService contentHostingService;
+	public CollectionResource createCollection(String path)
 			throws NotAuthorizedException, ConflictException,
 			BadRequestException {
+		if (HttpManager.request().getContentLengthHeader() > 0) {
+			//resp.sendError(SakaidavStatus.SC_UNSUPPORTED_MEDIA_TYPE);
+			return null;
+		}
+		
+		
+		//TODO: add is readonly
+		//TODO: add is locked 
+
+		// path //= getRelativePathSAKAI(HttpManager.request());
+		if (prohibited(path) || (path.toUpperCase().startsWith("/WEB-INF")) || (path.toUpperCase().startsWith("/META-INF")))
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+
+		String name = justName(path);//we have just name
+
+		if ((name.toUpperCase().startsWith("/WEB-INF")) || (name.toUpperCase().startsWith("/META-INF")))
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+
+		// Check to see if the parent collection exists. ContentHosting will create a parent folder if it 
+		// does not exist, but the WebDAV spec requires this operation to fail (rfc2518, 8.3.1).
+		
+		String parentId = isolateContainingId(adjustId(path));//we have parentid
+		
+		try {
+			contentHostingService.getCollection(parentId);//we have this too
+		} catch (IdUnusedException e1) {
+			//resp.sendError(SakaidavStatus.SC_CONFLICT);
+			return null;		
+		} catch (TypeException e1) {
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;						
+		} catch (PermissionException e1) {
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;			
+		}
+		
+		String adjustedId = adjustId(path);//we have adjusted id 
+	//How to work with the response object
+		// Check to see if collection with this name already exists
+		try
+		{	
+			contentHostingService.getProperties(adjustedId);
+			
+			// return error (litmus: MKCOL on existing collection should fail, RFC2518:8.3.1 / 8.3.2)
+			
+			//resp.sendError(SakaidavStatus.SC_METHOD_NOT_ALLOWED);
+			return null;
+
+		}
+		catch (IdUnusedException e)
+		{
+			// Resource not found (this is actually the normal case)
+		}
+		catch (PermissionException e)
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+
+		// Check to see if a resource with this name already exists
+		if (adjustedId.endsWith("/") && adjustedId.length() > 1)
+		try
+		{
+			String idToCheck = adjustedId.substring(0, adjustedId.length() - 1);
+			
+			contentHostingService.getProperties(idToCheck);
+			
+			// don't allow overwriting an existing resource (litmus: mkcol_over_plain)
+
+			//resp.sendError(SakaidavStatus.SC_METHOD_NOT_ALLOWED);
+			return null;
+
+		}
+		catch (IdUnusedException e)
+		{
+			// Resource not found (this is actually the normal case)
+		}
+		catch (PermissionException e)
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		
+		// Add the collection
+
+		try
+		{
+			ContentCollectionEdit edit = contentHostingService.addCollection(adjustId(path));
+			ResourcePropertiesEdit resourceProperties = edit.getPropertiesEdit();
+			resourceProperties.addProperty(ResourceProperties.PROP_DISPLAY_NAME, name);
+			contentHostingService.commitCollection(edit);
+		}
+
+		catch (IdUsedException e)
+		{
+			// Should not happen because if this esists, we either return or delete above
+		}
+		catch (IdInvalidException e)
+		{
+			M_log.warn("SAKAIDavServlet.doMkcol() IdInvalid:" + e.getMessage());
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		catch (PermissionException e)
+		{
+			// This is normal
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		catch (InconsistentException e)
+		{
+			M_log.warn("SAKAIDavServlet.doMkcol() InconsistentException:" + e.getMessage());
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		
 		// TODO Auto-generated method stub
 		return null;
 	}
+	private String adjustId(String path) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+	private boolean prohibited(String path) {
+		// TODO Auto-generated method stub
+		return false;
+	}
+	/*protected String getRelativePath(HttpServletRequest request)
+	{
 
+		// Are we being processed by a RequestDispatcher.include()?
+		if (request.getAttribute("javax.servlet.include.request_uri") != null)
+		{
+			String result = (String) request.getAttribute("javax.servlet.include.path_info");
+			if (result == null) result = (String) request.getAttribute("javax.servlet.include.servlet_path");
+			if ((result == null) || (result.equals(""))) result = "/";
+			return (result);
+		}
+
+		// Are we being processed by a RequestDispatcher.forward()?
+		if (request.getAttribute("javax.servlet.forward.request_uri") != null)
+		{
+			String result = (String) request.getAttribute("javax.servlet.forward.path_info");
+			if (result == null) result = (String) request.getAttribute("javax.servlet.forward.servlet_path");
+			if ((result == null) || (result.equals(""))) result = "/";
+			return (result);
+		}
+
+		// No, extract the desired path directly from the request
+		String result = getRelativePathSAKAI((HttpServletRequest)request);
+		
+		return normalize(result);
+
+	}
+	public String getRelativePathSAKAI(Request request)
+	{
+		String path = ((HttpServletRequest) request).getPathInfo();
+		
+		if (path == null) path = "/";
+		if (M_log.isDebugEnabled()) M_log.debug("getRelativePathSAKAI = " + path);
+		return path;
+
+	}*/
+	protected String normalize(String path)
+	{
+		if (path == null) return null;
+
+		// Create a place for the normalized path
+		String normalized = path;
+
+		/*
+		 * Commented out -- already URL-decoded in StandardContextMapper Decoding twice leaves the container vulnerable to %25 --> '%' attacks. if (normalized.indexOf('%') >= 0) normalized = RequestUtil.URLDecode(normalized, "UTF8");
+		 */
+
+		if (normalized.equals("/.")) return "/";
+
+		// Normalize the slashes and add leading slash if necessary
+		if (normalized.indexOf('\\') >= 0) normalized = normalized.replace('\\', '/');
+		if (!normalized.startsWith("/")) normalized = "/" + normalized;
+
+		// Resolve occurrences of "//" in the normalized path
+		while (true)
+		{
+			int index = normalized.indexOf("//");
+			if (index < 0) break;
+			normalized = normalized.substring(0, index) + normalized.substring(index + 1);
+		}
+
+		// Resolve occurrences of "/./" in the normalized path
+		while (true)
+		{
+			int index = normalized.indexOf("/./");
+			if (index < 0) break;
+			normalized = normalized.substring(0, index) + normalized.substring(index + 2);
+		}
+
+		// Resolve occurrences of "/../" in the normalized path
+		while (true)
+		{
+			int index = normalized.indexOf("/../");
+			if (index < 0) break;
+			if (index == 0) return (null); // Trying to go outside our context
+			int index2 = normalized.lastIndexOf('/', index - 1);
+			normalized = normalized.substring(0, index2) + normalized.substring(index + 3);
+		}
+
+		// Return the normalized path that we have completed
+		return (normalized);
+
+	}
+	protected String justName(String str)
+	{
+		try
+		{
+			// Note: there may be a trailing separator
+			int pos = str.lastIndexOf("/", str.length() - 2);
+			String rv = str.substring(pos + 1);
+			if (rv.endsWith("/"))
+			{
+				rv = rv.substring(0, rv.length() - 1);
+			}
+			return rv;
+		}
+		catch (Throwable t)
+		{
+			return str;
+		}
+	}
+	private String isolateContainingId(String id)
+	{
+		// take up to including the last resource path separator, not counting one at the very end if there
+		return id.substring(0, id.lastIndexOf('/', id.length() - 2) + 1);
+
+	} // isolateContainingId
 	public Resource child(String arg0) {
 		// TODO Auto-generated method stub
 		return null;

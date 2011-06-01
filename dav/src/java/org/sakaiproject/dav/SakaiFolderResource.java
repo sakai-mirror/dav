@@ -98,7 +98,7 @@ public class SakaiFolderResource  implements FolderResource {
 		//TODO: add is locked 
 
 		// path //= getRelativePathSAKAI(HttpManager.request());
-		if (prohibited(path) || (path.toUpperCase().startsWith("/WEB-INF")) || (path.toUpperCase().startsWith("/META-INF")))
+		if (sakaiDavHelper.prohibited(path) || (path.toUpperCase().startsWith("/WEB-INF")) || (path.toUpperCase().startsWith("/META-INF")))
 		{
 			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
 			return null;
@@ -115,7 +115,7 @@ public class SakaiFolderResource  implements FolderResource {
 		// Check to see if the parent collection exists. ContentHosting will create a parent folder if it 
 		// does not exist, but the WebDAV spec requires this operation to fail (rfc2518, 8.3.1).
 		
-		String parentId = isolateContainingId(sakaiDavHelper.adjustId(path));//we have parentid
+		String parentId = sakaiDavHelper.isolateContainingId(sakaiDavHelper.adjustId(path));//we have parentid
 		
 		try {
 			contentHostingService.getCollection(parentId);//we have this too
@@ -213,58 +213,12 @@ public class SakaiFolderResource  implements FolderResource {
 		// TODO Auto-generated method stub
 		return null;
 	}
-	/*private String adjustId(String path) {
-		// TODO Auto-generated method stub
-		return null;
-	}*/
-	private boolean prohibited(String path) {
-		// TODO Auto-generated method stub
-		return false;
-	}
-	/*protected String getRelativePath(HttpServletRequest request)
-	{
-
-		// Are we being processed by a RequestDispatcher.include()?
-		if (request.getAttribute("javax.servlet.include.request_uri") != null)
-		{
-			String result = (String) request.getAttribute("javax.servlet.include.path_info");
-			if (result == null) result = (String) request.getAttribute("javax.servlet.include.servlet_path");
-			if ((result == null) || (result.equals(""))) result = "/";
-			return (result);
-		}
-
-		// Are we being processed by a RequestDispatcher.forward()?
-		if (request.getAttribute("javax.servlet.forward.request_uri") != null)
-		{
-			String result = (String) request.getAttribute("javax.servlet.forward.path_info");
-			if (result == null) result = (String) request.getAttribute("javax.servlet.forward.servlet_path");
-			if ((result == null) || (result.equals(""))) result = "/";
-			return (result);
-		}
-
-		// No, extract the desired path directly from the request
-		String result = getRelativePathSAKAI((HttpServletRequest)request);
-		
-		return normalize(result);
-
-	}
-	public String getRelativePathSAKAI(Request request)
-	{
-		String path = ((HttpServletRequest) request).getPathInfo();
-		
-		if (path == null) path = "/";
-		if (M_log.isDebugEnabled()) M_log.debug("getRelativePathSAKAI = " + path);
-		return path;
-
-	}*/
 	
 	
-	private String isolateContainingId(String id)
-	{
-		// take up to including the last resource path separator, not counting one at the very end if there
-		return id.substring(0, id.lastIndexOf('/', id.length() - 2) + 1);
-
-	} // isolateContainingId
+	
+	
+	
+	
 	public Resource child(String arg0) {
 		// TODO Auto-generated method stub
 		return null;

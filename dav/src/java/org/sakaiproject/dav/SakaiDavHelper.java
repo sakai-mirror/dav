@@ -16,6 +16,10 @@ import org.sakaiproject.util.StringUtil;
  * Class which contains all the helper methods 
  */
 public class SakaiDavHelper  {
+	/**
+	 * Don't show directories starting with "protected" to non-owner This defaults off because it requires corresponding changes in AccessServlet, which currently aren't present.
+	 */
+	private boolean doProtected = false;
 	 protected ContentHostingService contentHostingService = (ContentHostingService) ComponentManager.get(ContentHostingService.class.getName());;
 	protected String adjustId(String id)
 	{
@@ -226,5 +230,19 @@ public class SakaiDavHelper  {
 		return formats;
 	}
 	
+	protected String isolateContainingId(String id)
+	{
+		// take up to including the last resource path separator, not counting one at the very end if there
+		return id.substring(0, id.lastIndexOf('/', id.length() - 2) + 1);
 
+	} // isolateContainingId
+	protected boolean prohibited(String id) {
+	    if (id == null)
+		return false;
+	    if (id.startsWith("/attachment/") || id.equals("/attachment") ||
+		(doProtected && id.toLowerCase().indexOf("/protected") >= 0 &&
+		 (!contentHostingService.allowAddCollection(adjustId(id)))))
+		return true;
+	    return false;
+	}
 }

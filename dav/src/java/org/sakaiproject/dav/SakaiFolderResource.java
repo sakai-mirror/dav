@@ -3,6 +3,7 @@ package org.sakaiproject.dav;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -225,8 +226,29 @@ public class SakaiFolderResource  implements FolderResource {
 	}
 
 	public List<? extends Resource> getChildren() {
+		ContentCollection collection;
 		// TODO Auto-generated method stub
-		return null;
+		try {
+			collection = contentHostingService.getCollection(sakaiDavHelper.adjustId(((HttpServletRequest) HttpManager.request()).getPathInfo()));
+		} catch (IdUnusedException e) {
+			// TODO Auto-generated catch block
+			//e.printStackTrace();
+			return null;
+		} catch (TypeException e) {
+			// TODO Auto-generated catch block
+			//e.printStackTrace();
+			return null;
+		} catch (PermissionException e) {
+			// TODO Auto-generated catch block
+			//e.printStackTrace();
+			return null;
+		}
+		ArrayList children = new ArrayList();
+		List<Entity> members = collection.getMemberResources();
+		for(Entity member:members){
+			children.add(member);
+		}
+		return children;
 	}
 
 	public Object authenticate(String arg0, String arg1) {

@@ -16,6 +16,11 @@ import com.bradmcevoy.http.exceptions.BadRequestException;
 import com.bradmcevoy.http.exceptions.ConflictException;
 import com.bradmcevoy.http.exceptions.NotAuthorizedException;
 public class SakaiFileResource implements FileResource{
+	private String path;
+	public SakaiFileResource(String path) {
+		// TODO Auto-generated constructor stub
+		this.path=path;
+	}
 
 	public void copyTo(CollectionResource arg0, String arg1)
 			throws NotAuthorizedException, BadRequestException,

@@ -83,8 +83,13 @@ public class SakaiFolderResource  implements FolderResource {
 	private static Log M_log = LogFactory.getLog(SakaiFolderResource.class);
 	private ContentHostingService contentHostingService;
 	private SakaiDavHelper sakaiDavHelper;
+	private String path;
 	public SakaiFolderResource(){
 		sakaiDavHelper=new SakaiDavHelper();
+	}
+	public SakaiFolderResource(String path) {
+		this.path=path;
+		// TODO Auto-generated constructor stub
 	}
 	public CollectionResource createCollection(String path)
 			throws NotAuthorizedException, ConflictException,

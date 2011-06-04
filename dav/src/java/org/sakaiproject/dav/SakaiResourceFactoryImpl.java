@@ -1,6 +1,6 @@
 package org.sakaiproject.dav;
 
-import javax.naming.NamingException;
+
 
 import com.bradmcevoy.http.Resource;
 import com.bradmcevoy.http.ResourceFactory;
@@ -32,7 +32,7 @@ import org.sakaiproject.util.StringUtil;
 public class SakaiResourceFactoryImpl implements ResourceFactory{
 	//Content hosting service
 	private ContentHostingService contentHostingService;
-	private ContentCollection collection;
+	//private ContentCollection collection;
 	private SakaiDavHelper sakaiDavHelper;
 	public SakaiResourceFactoryImpl(){
 		super();
@@ -67,6 +67,9 @@ public class SakaiResourceFactoryImpl implements ResourceFactory{
 			if (isCollection)
 			{
 				return new SakaiFolderResource(path);
+			}
+			else{
+				return new SakaiFileResource(path);
 			}
 		}
 		catch (PermissionException e)

@@ -1,5 +1,7 @@
 package org.sakaiproject.dav;
 
+import javax.naming.NamingException;
+
 import com.bradmcevoy.http.Resource;
 import com.bradmcevoy.http.ResourceFactory;
 
@@ -18,6 +20,7 @@ import org.sakaiproject.entity.api.EntityPropertyTypeException;
 import org.sakaiproject.entity.api.ResourceProperties;
 import org.sakaiproject.entity.api.ResourcePropertiesEdit;
 import org.sakaiproject.event.api.NotificationService;
+//import org.sakaiproject.exception.pathUnusedException;
 import org.sakaiproject.exception.IdUnusedException;
 import org.sakaiproject.exception.PermissionException;
 import org.sakaiproject.exception.TypeException;
@@ -29,6 +32,7 @@ import org.sakaiproject.util.StringUtil;
 public class SakaiResourceFactoryImpl implements ResourceFactory{
 	//Content hosting service
 	private ContentHostingService contentHostingService;
+	private ContentCollection collection;
 	private SakaiDavHelper sakaiDavHelper;
 	public SakaiResourceFactoryImpl(){
 		super();
@@ -38,25 +42,55 @@ public class SakaiResourceFactoryImpl implements ResourceFactory{
 	//Logger
 	private static Log M_log = LogFactory.getLog(SakaiResourceFactoryImpl.class);
 	public Resource getResource(String host, String path) {
-		contentHostingService = (ContentHostingService) ComponentManager.get(ContentHostingService.class.getName());
-		Entity mbr = null;
-		try {
-			mbr = contentHostingService.getResource(sakaiDavHelper.adjustId(path));
-		} catch (PermissionException e) {
-			// TODO Auto-generated catch block
-			//e.printStackTrace();
-			M_log.debug("ResourceInfoSAKAI - You do not have permission to view this resource " + path);
-		} catch (IdUnusedException e) {
-			// TODO Auto-generated catch block
-			//e.printStackTrace();
-			M_log.debug("ResourceInfoSAKAI - This resource does not exist " + path);
-		} catch (TypeException e) {
-			// TODO Auto-generated catch block
-			//e.printStackTrace();
-			M_log.warn("ResourceInfoSAKAI - Type Exception " + path);
+		if(sakaiDavHelper.prohibited(path)){
+			return null;
 		}
-		// TODO Auto-generated method stub
-		return (Resource)mbr;
+		boolean isCollection;
+		try
+		{
+			ResourceProperties props;
+
+			//path = fixDirPathSAKAI(path);
+
+			// Do not allow access to /attachments
+
+			if (path.startsWith("/attachments"))
+			{
+				M_log.info("DirContextSAKAI.lookup - You do not have permission to view this area " + path);
+				//throw new NamingException();
+			}
+
+			props = contentHostingService.getProperties(sakaiDavHelper.adjustId(path));
+
+			isCollection = props.getBooleanProperty(ResourceProperties.PROP_IS_COLLECTION);
+
+			if (isCollection)
+			{
+				return new SakaiFolderResource(path);
+			}
+		}
+		catch (PermissionException e)
+		{
+			M_log.debug("DirContextSAKAI.lookup - You do not have permission to view this resource " + path);
+			//throw new NamingException();
+		}
+		catch (IdUnusedException e)
+		{
+			M_log.debug("DirContextSAKAI.lookup - This resource does not exist: " + path);
+			//throw new NamingException();
+		}
+		catch (EntityPropertyNotDefinedException e)
+		{
+			M_log.warn("DirContextSAKAI.lookup - This resource is empty: " + path);
+			//throw new NamingException();
+		}
+		catch (EntityPropertyTypeException e)
+		{
+			M_log.warn("DirContextSAKAI.lookup - This resource has a EntityPropertyTypeException exception: " + path);
+			//throw new NamingException();
+		}
+		
+		return null;
 	}
 	
 	

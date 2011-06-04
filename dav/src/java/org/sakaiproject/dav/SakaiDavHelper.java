@@ -1,10 +1,17 @@
 package org.sakaiproject.dav;
 
+//import DavServlet;
+
 import java.text.SimpleDateFormat;
 import java.util.Locale;
 import java.util.TimeZone;
 
+import javax.servlet.http.HttpServletRequest;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.sakaiproject.component.cover.ComponentManager;
+import org.sakaiproject.component.cover.ServerConfigurationService;
 import org.sakaiproject.content.api.ContentHostingService;
 import org.sakaiproject.entity.api.Entity;
 import org.sakaiproject.user.api.UserNotDefinedException;
@@ -20,7 +27,39 @@ public class SakaiDavHelper  {
 	 * Don't show directories starting with "protected" to non-owner This defaults off because it requires corresponding changes in AccessServlet, which currently aren't present.
 	 */
 	private boolean doProtected = false;
-	 protected ContentHostingService contentHostingService = (ContentHostingService) ComponentManager.get(ContentHostingService.class.getName());;
+	private static Log M_log = LogFactory.getLog(SakaiDavHelper.class);
+	 protected ContentHostingService contentHostingService = (ContentHostingService) ComponentManager.get(ContentHostingService.class.getName());
+	 String path;
+	 public SakaiDavHelper(String path){
+		 this.path=path;
+		 
+	 }
+	 public SakaiDavHelper(){
+		 
+	 }
+	 protected boolean isFileNameAllowed()
+		{
+		 String[] ignorePatterns = ServerConfigurationService.getStrings("webdav.ignore");
+			if (ignorePatterns != null)
+			{
+				String outVal = "";
+				for (int i = 0; i < ignorePatterns.length; i++)
+				{
+					if (outVal.length() > 0) outVal = outVal + " : ";
+					outVal = outVal + ignorePatterns[i];
+				}
+				M_log.info("ignore patterns:" + outVal);
+			}
+			if (ignorePatterns == null) return true;
+
+			String sakaiPath = path;
+			for (int i = 0; i < ignorePatterns.length; i++)
+			{
+				if (sakaiPath.lastIndexOf(ignorePatterns[i]) > 0) return false;
+			}
+			return true;
+		}
+
 	protected String adjustId(String id)
 	{
 		// Note: code stolen and to be kept synced wtih BaseContentService.parseEntityReference() -ggolden

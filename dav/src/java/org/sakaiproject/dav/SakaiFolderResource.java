@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -85,7 +87,7 @@ public class SakaiFolderResource  implements FolderResource {
 	private SakaiDavHelper sakaiDavHelper;
 	private String path;
 	public SakaiFolderResource(){
-		sakaiDavHelper=new SakaiDavHelper();
+		sakaiDavHelper=new SakaiDavHelper(path);
 	}
 	public SakaiFolderResource(String path) {
 		this.path=path;
@@ -290,27 +292,248 @@ public class SakaiFolderResource  implements FolderResource {
 		// TODO Auto-generated method stub
 		return null;
 	}
+	/*
+	 * 
+	 * (non-Javadoc)
+	 * @see com.bradmcevoy.http.PutableResource#createNew(java.lang.String, java.io.InputStream, java.lang.Long, java.lang.String)
+	 */
 
-	public Resource createNew(String arg0, InputStream arg1, Long arg2,
-			String arg3) throws IOException, ConflictException,
+	public Resource createNew(String nameOfResource, InputStream instream, Long length,
+			String contentType) throws IOException, ConflictException,
 			NotAuthorizedException, BadRequestException {
+		if (!sakaiDavHelper.isFileNameAllowed())
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		ResourceProperties oldProps = null;
+		Collection oldGroups = null;
+		boolean oldPubView = false;
+		boolean oldHidden = false;
+		Time releaseDate = null;
+		Time retractDate = null;
+		
+		boolean newfile = true;
+		if (sakaiDavHelper.prohibited(path) || (path.toUpperCase().startsWith("/WEB-INF")) || (path.toUpperCase().startsWith("/META-INF")))
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		if (path.length() > 254)
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		if ((nameOfResource.toUpperCase().startsWith("/WEB-INF")) || (nameOfResource.toUpperCase().startsWith("/META-INF")))
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		// Try to delete the resource
+		try
+		{
+			// The existing document may be a collection or a file.
+			boolean isCollection = contentHostingService.getProperties(sakaiDavHelper.adjustId(path)).getBooleanProperty(
+					ResourceProperties.PROP_IS_COLLECTION);
+
+			if (isCollection)
+			{
+				contentHostingService.removeCollection(sakaiDavHelper.adjustId(path));
+			}
+			else
+			{
+			    	String id = sakaiDavHelper.adjustId(path);
+				// save original properties; we're just updating the file
+				oldProps = contentHostingService.getProperties(id);
+				newfile = false;
+
+				try {
+				    ContentResource resource = contentHostingService.getResource(id);
+				    oldGroups = resource.getGroups();
+				    oldHidden = resource.isHidden();
+				    releaseDate = resource.getReleaseDate();
+				    retractDate = resource.getRetractDate();
+				} catch (Exception e) {M_log.info("doPut fail 1" + e);} ;
+
+				try {
+				    if (!contentHostingService.isInheritingPubView(id))
+					if (contentHostingService.isPubView(id)) 
+					    oldPubView = true;
+				} catch (Exception e) {M_log.info("doPut fail 2" + e);};
+				
+				contentHostingService.removeResource(sakaiDavHelper.adjustId(path));
+			}
+		}
+		catch (PermissionException e)
+		{
+			// Normal situation
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		catch (InUseException e)
+		{
+			// Normal situation
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN); // %%%
+			return null;
+		}
+		catch (IdUnusedException e)
+		{
+			// Normal situation - nothing to do
+		}
+		catch (EntityPropertyNotDefinedException e)
+		{
+			M_log.warn("SAKAIDavServlet.doMkcol() - EntityPropertyNotDefinedException " + path);
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		catch (TypeException e)
+		{
+			M_log.warn("SAKAIDavServlet.doMkcol() - TypeException " + path);
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		catch (EntityPropertyTypeException e)
+		{
+			M_log.warn("SAKAIDavServlet.doMkcol() - EntityPropertyType " + path);
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		catch (ServerOverloadException e)
+		{
+			M_log.warn("SAKAIDavServlet.doMkcol() - ServerOverloadException " + path);
+			//resp.sendError(SakaidavStatus.SC_SERVICE_UNAVAILABLE);
+			return null;
+		}
+		if (M_log.isDebugEnabled()) M_log.debug("  req.contentType() =" + contentType);
+		if (contentType == null)
+		{
+			if (M_log.isDebugEnabled()) M_log.debug("Unable to determine contentType");
+			contentType = ""; // Still cannot figure it out
+		}
+		try
+		{
+			User user = UserDirectoryService.getCurrentUser();
+
+			TimeBreakdown timeBreakdown = TimeService.newTime().breakdownLocal();
+			String mycopyright = "copyright (c)" + " " + timeBreakdown.getYear() + ", " + user.getDisplayName()
+					+ ". All Rights Reserved. ";
+
+			// use this code rather than the long form of addResource
+			// because it doesn't add an extension. Delete doesn't, so we have
+			// to match, and I'd just as soon be able to create items with no extension anyway
+			
+			ContentResourceEdit edit = contentHostingService.addResource(sakaiDavHelper.adjustId(path));
+			edit.setContentType(contentType);
+			edit.setContent(instream);
+			ResourcePropertiesEdit p = edit.getPropertiesEdit();
+
+			try {
+			    if (oldGroups != null && !oldGroups.isEmpty())
+				edit.setGroupAccess(oldGroups);
+			} catch (Exception e) {M_log.info("doPut fail 3 " + e + " " + oldGroups);};
+
+			try {
+			    edit.setAvailability(oldHidden, releaseDate, retractDate);
+			} catch (Exception e) {M_log.info("doPut fail 4 " + e);};
+
+
+			// copy old props, if any
+			if (oldProps != null)
+			{
+				Iterator it = oldProps.getPropertyNames();
+
+				while (it.hasNext())
+				{
+					String pname = (String) it.next();
+
+					// skip any live properties
+					if (!oldProps.isLiveProperty(pname))
+					{
+						p.addProperty(pname, oldProps.getProperty(pname));
+					}
+				}
+			}
+
+			if (newfile)
+			{
+				p.addProperty(ResourceProperties.PROP_COPYRIGHT, mycopyright);
+				p.addProperty(ResourceProperties.PROP_DISPLAY_NAME, nameOfResource);
+			}
+
+			// commit the change
+			contentHostingService.commitResource(edit, NotificationService.NOTI_NONE);
+			if (oldPubView)
+			    contentHostingService.setPubView(sakaiDavHelper.adjustId(path), true);
+
+		}
+		catch (IdUsedException e)
+		{
+			// Should not happen because we deleted above (unless two requests at same time)
+			M_log.warn("SAKAIDavServlet.doPut() IdUsedException:" + e.getMessage());
+
+			//resp.sendError(HttpServletResponse.SC_CONFLICT);
+			return null;
+		}
+		catch (IdInvalidException e)
+		{
+			M_log.warn("SAKAIDavServlet.doPut() IdInvalidException:" + e.getMessage());
+			//resp.sendError(HttpServletResponse.SC_CONFLICT);
+			return null;
+		}
+		catch (PermissionException e)
+		{
+			// Normal
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		catch (OverQuotaException e)
+		{
+			// Normal %%% what's the proper response for over-quota?
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
+		catch (InconsistentException e)
+		{
+			M_log.warn("SAKAIDavServlet.doPut() InconsistentException:" + e.getMessage());
+			//resp.sendError(HttpServletResponse.SC_CONFLICT);
+			return null;
+		}
+		catch (ServerOverloadException e)
+		{
+			M_log.warn("SAKAIDavServlet.doPut() ServerOverloadException:" + e.getMessage());
+			//resp.setStatus(SakaidavStatus.SC_SERVICE_UNAVAILABLE);
+			return null;
+		}
 		// TODO Auto-generated method stub
 		return null;
 	}
-
+	/*
+	 * 
+	 * (non-Javadoc)
+	 * @see com.bradmcevoy.http.CopyableResource#copyTo(com.bradmcevoy.http.CollectionResource, java.lang.String)
+	 */
 	public void copyTo(CollectionResource arg0, String arg1)
 			throws NotAuthorizedException, BadRequestException,
 			ConflictException {
 		// TODO Auto-generated method stub
 		
 	}
-
+	/*
+	 * 
+	 * (non-Javadoc)
+	 * @see com.bradmcevoy.http.DeletableResource#delete()
+	 */
 	public void delete() throws NotAuthorizedException, ConflictException,
 			BadRequestException {
 		// TODO Auto-generated method stub
 		
 	}
 
+	/*
+	 * 
+	 * (non-Javadoc)
+	 * @see com.bradmcevoy.http.GetableResource#getContentLength()
+	 */
 	public Long getContentLength() {
 		// TODO Auto-generated method stub
 		return null;

@@ -243,9 +243,9 @@ public class SakaiFolderResource  implements FolderResource {
 			//e.printStackTrace();
 			return null;
 		}
-		ArrayList children = new ArrayList();
-		List<Entity> members = collection.getMemberResources();
-		for(Entity member:members){
+		ArrayList<Resource> children = new ArrayList<Resource>();
+		List<Resource> members = collection.getMemberResources();
+		for(Resource member:members){
 			children.add(member);
 		}
 		return children;

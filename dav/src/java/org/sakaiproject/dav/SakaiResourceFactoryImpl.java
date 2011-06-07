@@ -91,6 +91,9 @@ public class SakaiResourceFactoryImpl implements ResourceFactory{
 		{
 			M_log.warn("DirContextSAKAI.lookup - This resource has a EntityPropertyTypeException exception: " + path);
 			//throw new NamingException();
+		} catch (TypeException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 		
 		return null;

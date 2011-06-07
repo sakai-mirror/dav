@@ -1,11 +1,16 @@
 package org.sakaiproject.dav;
 
+//import SakaidavStatus;
+
+//import SakaidavStatus;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -13,13 +18,20 @@ import java.util.Map;
 import com.bradmcevoy.http.Auth;
 import com.bradmcevoy.http.CollectionResource;
 import com.bradmcevoy.http.FolderResource;
+import com.bradmcevoy.http.LockInfo;
+import com.bradmcevoy.http.LockResult;
+import com.bradmcevoy.http.LockTimeout;
+import com.bradmcevoy.http.LockToken;
+import com.bradmcevoy.http.LockableResource;
 import com.bradmcevoy.http.Range;
 import com.bradmcevoy.http.Request;
 import com.bradmcevoy.http.Request.Method;
 import com.bradmcevoy.http.Resource;
 import com.bradmcevoy.http.exceptions.BadRequestException;
 import com.bradmcevoy.http.exceptions.ConflictException;
+import com.bradmcevoy.http.exceptions.LockedException;
 import com.bradmcevoy.http.exceptions.NotAuthorizedException;
+import com.bradmcevoy.http.exceptions.PreConditionFailedException;
 import com.bradmcevoy.http.HttpManager;
 
 import javax.naming.NamingException;
@@ -81,17 +93,74 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXParseException;
 
-public class SakaiFolderResource  implements FolderResource {
+public class SakaiFolderResource  implements FolderResource,LockableResource{
 	private static Log M_log = LogFactory.getLog(SakaiFolderResource.class);
 	private ContentHostingService contentHostingService;
 	private SakaiDavHelper sakaiDavHelper;
 	private String path;
-	public SakaiFolderResource(){
-		sakaiDavHelper=new SakaiDavHelper(path);
-	}
-	public SakaiFolderResource(String path) {
+	private boolean readOnly;
+	ResourceProperties props;
+	
+	/* The Resource Properties */
+	
+	public boolean collection;//is it a collection
+	public boolean exists;//Does the Resource Specified by the path exists
+	public long length;
+	public long creationDate;//Date Created
+	public String MIMEType;
+	public long modificationDate;
+	public long date; // From DirContext
+	public String displayName;
+	public String resourceName; // The "non-display" name
+	public String resourceLink; // The resource link (within SAKAI)
+	public String eTag; // The eTag
+	
+	
+	
+	/**
+	 * Repository of the locks put on single resources.
+	 * <p>
+	 * Key : path <br>
+	 * Value : LockInfo
+	 */
+	private Hashtable<String,LockToken> resourceLocks = new Hashtable<String,LockToken>();//same as in dotcms
+
+	
+	public SakaiFolderResource(String path) throws PermissionException, IdUnusedException, EntityPropertyNotDefinedException, EntityPropertyTypeException, TypeException {
 		this.path=path;
-		// TODO Auto-generated constructor stub
+		sakaiDavHelper=new SakaiDavHelper(path);
+		getResourceInfo();
+
+	}
+	
+	private void getResourceInfo() throws PermissionException, IdUnusedException, EntityPropertyNotDefinedException, EntityPropertyTypeException, TypeException{
+		props = contentHostingService.getProperties(sakaiDavHelper.adjustId(path));
+		Entity mbr;
+		exists = false;
+		collection=false;
+		collection = props.getBooleanProperty(ResourceProperties.PROP_IS_COLLECTION);
+		resourceName = props.getProperty(ResourceProperties.PROP_DISPLAY_NAME);
+		displayName = props.getPropertyFormatted(ResourceProperties.PROP_DISPLAY_NAME);
+		exists = true;
+		if (!collection)
+		{
+			mbr = contentHostingService.getResource(sakaiDavHelper.adjustId(path));
+			// Props for a file is OK from above
+			length = ((ContentResource) mbr).getContentLength();
+			MIMEType = ((ContentResource) mbr).getContentType();
+			eTag = ((ContentResource) mbr).getId();
+		}
+		else
+		{
+			mbr = contentHostingService.getCollection(sakaiDavHelper.adjustId(path));
+			props = mbr.getProperties();
+			eTag = path;
+		}
+		modificationDate = props.getTimeProperty(ResourceProperties.PROP_MODIFIED_DATE).getTime();
+		eTag = modificationDate + "+" + eTag;
+		if (M_log.isDebugEnabled()) M_log.debug("Path=" + path + " eTag=" + eTag);
+		creationDate = props.getTimeProperty(ResourceProperties.PROP_CREATION_DATE).getTime();
+		resourceLink = mbr.getUrl();
 	}
 	public CollectionResource createCollection(String path)
 			throws NotAuthorizedException, ConflictException,
@@ -103,7 +172,14 @@ public class SakaiFolderResource  implements FolderResource {
 		
 		
 		//TODO: add is readonly
-		//TODO: add is locked 
+		if(sakaiDavHelper.isLocked(contentHostingService, path)){
+			return null;
+		}
+		if (readOnly)
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return null;
+		}
 
 		// path //= getRelativePathSAKAI(HttpManager.request());
 		if (sakaiDavHelper.prohibited(path) || (path.toUpperCase().startsWith("/WEB-INF")) || (path.toUpperCase().startsWith("/META-INF")))
@@ -274,13 +350,12 @@ public class SakaiFolderResource  implements FolderResource {
 	}
 
 	public Date getModifiedDate() {
-		// TODO Auto-generated method stub
-		return null;
+		return new Date(modificationDate);
+		//return null;
 	}
 
 	public String getName() {
-		// TODO Auto-generated method stub
-		return null;
+		return resourceName;
 	}
 
 	public String getRealm() {
@@ -289,11 +364,11 @@ public class SakaiFolderResource  implements FolderResource {
 	}
 
 	public String getUniqueId() {
-		// TODO Auto-generated method stub
-		return null;
+		
+		return contentHostingService.getUuid(path);
 	}
 	/*
-	 * 
+	 *This is analogous to the doPut method 
 	 * (non-Javadoc)
 	 * @see com.bradmcevoy.http.PutableResource#createNew(java.lang.String, java.io.InputStream, java.lang.Long, java.lang.String)
 	 */
@@ -519,12 +594,76 @@ public class SakaiFolderResource  implements FolderResource {
 		
 	}
 	/*
-	 * 
+	 * doDelete Method 
 	 * (non-Javadoc)
 	 * @see com.bradmcevoy.http.DeletableResource#delete()
 	 */
 	public void delete() throws NotAuthorizedException, ConflictException,
 			BadRequestException {
+		if (readOnly)
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return;
+		}
+
+		if (sakaiDavHelper.isLocked(contentHostingService,path))
+		{
+			//resp.sendError(SakaidavStatus.SC_LOCKED);
+			return;
+		}
+		if (sakaiDavHelper.prohibited(path) || (path.toUpperCase().startsWith("/WEB-INF")) || (path.toUpperCase().startsWith("/META-INF")))
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return;
+		}
+		boolean isCollection = false;
+		try
+		{
+			isCollection = contentHostingService.getProperties(sakaiDavHelper.adjustId(path)).getBooleanProperty(ResourceProperties.PROP_IS_COLLECTION);
+
+			if (isCollection)
+			{
+				contentHostingService.removeCollection(sakaiDavHelper.adjustId(path));
+			}
+			else
+			{
+				contentHostingService.removeResource(sakaiDavHelper.adjustId(path));
+			}
+		}
+		catch (PermissionException e)
+		{
+			return ;
+		}
+		catch (InUseException e)
+		{
+			return ;
+		}
+		catch (IdUnusedException e)
+		{
+			// Resource not found
+			//resp.sendError(SakaidavStatus.SC_NOT_FOUND);
+			return ;
+		}
+		catch (EntityPropertyNotDefinedException e)
+		{
+			M_log.warn("SAKAIDavServlet.deleteResource() - EntityPropertyNotDefinedException " + path);
+			return ;
+		}
+		catch (EntityPropertyTypeException e)
+		{
+			M_log.warn("SAKAIDavServlet.deleteResource() - EntityPropertyTypeException " + path);
+			return ;
+		}
+		catch (TypeException e)
+		{
+			M_log.warn("SAKAIDavServlet.deleteResource() - TypeException " + path);
+			return ;
+		}
+		catch (ServerOverloadException e)
+		{
+			M_log.warn("SAKAIDavServlet.deleteResource() - ServerOverloadException " + path);
+			return ;
+		}
 		// TODO Auto-generated method stub
 		
 	}
@@ -535,13 +674,13 @@ public class SakaiFolderResource  implements FolderResource {
 	 * @see com.bradmcevoy.http.GetableResource#getContentLength()
 	 */
 	public Long getContentLength() {
-		// TODO Auto-generated method stub
-		return null;
+		
+		return length;
 	}
 
 	public String getContentType(String arg0) {
 		// TODO Auto-generated method stub
-		return null;
+		return MIMEType;
 	}
 
 	public Long getMaxAgeSeconds(Auth arg0) {
@@ -550,7 +689,7 @@ public class SakaiFolderResource  implements FolderResource {
 	}
 
 	public void sendContent(OutputStream arg0, Range arg1,
-			Map<String, String> arg2, String arg3) throws IOException,
+			Map<String, String> params, String contentType) throws IOException,
 			NotAuthorizedException, BadRequestException {
 		// TODO Auto-generated method stub
 		
@@ -563,9 +702,35 @@ public class SakaiFolderResource  implements FolderResource {
 		
 	}
 
+	@SuppressWarnings("deprecation")
 	public Date getCreateDate() {
+		return new Date(creationDate);
+	}
+	public LockResult lock(LockTimeout timeout, LockInfo lockInfo)
+			throws NotAuthorizedException, PreConditionFailedException,
+			LockedException {
+		    LockToken token = new LockToken();
+		    token.info = lockInfo;
+		    token.timeout = LockTimeout.parseTimeout("30");
+		    token.tokenId = getUniqueId();
+		    resourceLocks.put(getUniqueId(), token);
+		    return LockResult.success(token);
 		// TODO Auto-generated method stub
+		//return null;
+	}
+	public LockResult refreshLock(String token) throws NotAuthorizedException,
+			PreConditionFailedException {
+		//TODO :refresh LOCK discuss with mentor
 		return null;
+	}
+	public void unlock(String tokenId) throws NotAuthorizedException,
+			PreConditionFailedException {
+		resourceLocks.remove(getUniqueId());
+		
+	}
+	public LockToken getCurrentLock() {
+			return resourceLocks.get(getUniqueId());
+		//return null;
 	}
 
 }

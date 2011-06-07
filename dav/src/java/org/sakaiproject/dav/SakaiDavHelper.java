@@ -37,6 +37,9 @@ public class SakaiDavHelper  {
 	 public SakaiDavHelper(){
 		 
 	 }
+	 protected boolean isLocked(ContentHostingService contentHostingService,String path){
+		 return contentHostingService.isLocked(path);
+	 }
 	 protected boolean isFileNameAllowed()
 		{
 		 String[] ignorePatterns = ServerConfigurationService.getStrings("webdav.ignore");

@@ -334,14 +334,14 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 		return children;
 	}
 
-	public Object authenticate(String arg0, String arg1) {
+	public Object authenticate(String username, String password) {
 		// TODO Auto-generated method stub
-		return null;
+		return username;
 	}
 
 	public boolean authorise(Request arg0, Method arg1, Auth arg2) {
 		// TODO Auto-generated method stub
-		return false;
+		return true;
 	}
 
 	public String checkRedirect(Request arg0) {

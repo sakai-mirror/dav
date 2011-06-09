@@ -9,13 +9,20 @@ import com.bradmcevoy.http.Auth;
 import com.bradmcevoy.http.CollectionResource;
 import com.bradmcevoy.http.FileItem;
 import com.bradmcevoy.http.FileResource;
+import com.bradmcevoy.http.LockInfo;
+import com.bradmcevoy.http.LockResult;
+import com.bradmcevoy.http.LockTimeout;
+import com.bradmcevoy.http.LockToken;
+import com.bradmcevoy.http.LockableResource;
 import com.bradmcevoy.http.Range;
 import com.bradmcevoy.http.Request;
 import com.bradmcevoy.http.Request.Method;
 import com.bradmcevoy.http.exceptions.BadRequestException;
 import com.bradmcevoy.http.exceptions.ConflictException;
+import com.bradmcevoy.http.exceptions.LockedException;
 import com.bradmcevoy.http.exceptions.NotAuthorizedException;
-public class SakaiFileResource implements FileResource{
+import com.bradmcevoy.http.exceptions.PreConditionFailedException;
+public class SakaiFileResource implements FileResource,LockableResource{
 	private String path;
 	public SakaiFileResource(String path) {
 		// TODO Auto-generated constructor stub
@@ -29,14 +36,14 @@ public class SakaiFileResource implements FileResource{
 		
 	}
 
-	public Object authenticate(String arg0, String arg1) {
+	public Object authenticate(String username, String password) {
 		// TODO Auto-generated method stub
-		return null;
+		return username;
 	}
 
 	public boolean authorise(Request arg0, Method arg1, Auth arg2) {
 		// TODO Auto-generated method stub
-		return false;
+		return true;
 	}
 
 	public String checkRedirect(Request arg0) {
@@ -107,6 +114,30 @@ public class SakaiFileResource implements FileResource{
 	}
 
 	public Date getCreateDate() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	public LockResult lock(LockTimeout timeout, LockInfo lockInfo)
+			throws NotAuthorizedException, PreConditionFailedException,
+			LockedException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	public LockResult refreshLock(String token) throws NotAuthorizedException,
+			PreConditionFailedException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	public void unlock(String tokenId) throws NotAuthorizedException,
+			PreConditionFailedException {
+		// TODO Auto-generated method stub
+		
+	}
+
+	public LockToken getCurrentLock() {
 		// TODO Auto-generated method stub
 		return null;
 	}

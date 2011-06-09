@@ -587,12 +587,141 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 	 * (non-Javadoc)
 	 * @see com.bradmcevoy.http.CopyableResource#copyTo(com.bradmcevoy.http.CollectionResource, java.lang.String)
 	 */
-	public void copyTo(CollectionResource arg0, String arg1)
+	@SuppressWarnings("unused")
+	public void copyTo(CollectionResource toCollection, String name)
 			throws NotAuthorizedException, BadRequestException,
 			ConflictException {
-		// TODO Auto-generated method stub
+		
+		//source is the current resource path and destination path is the path in toCollection
+	if (toCollection instanceof SakaiFolderResource){
+		SakaiFolderResource sfr=(SakaiFolderResource)toCollection;
+		String destinationPath=sfr.getPath();
+		if (destinationPath == null)
+		{
+			//resp.sendError(SakaidavStatus.SC_BAD_REQUEST);
+			return;
+		}
+		if (M_log.isDebugEnabled()) M_log.debug("Dest path :" + destinationPath);
+		if ((destinationPath.toUpperCase().startsWith("/WEB-INF")) || (destinationPath.toUpperCase().startsWith("/META-INF")))
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return ;
+		}
+		String sourcePath =this.path;
+		if (sakaiDavHelper.prohibited(sourcePath) || (path.toUpperCase().startsWith("/WEB-INF")) || (path.toUpperCase().startsWith("/META-INF")))
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return ;
+		}
+
+		if (sakaiDavHelper.prohibited(destinationPath) || destinationPath.equals(path))
+		{
+			//resp.sendError(SakaidavStatus.SC_FORBIDDEN);
+			return ;
+		}
+		try {
+			copycollection(destinationPath,sourcePath);
+		} catch (IdUnusedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (PermissionException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (TypeException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IdLengthException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IdUsedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IdUniquenessException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IdInvalidException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InUseException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InconsistentException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (OverQuotaException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ServerOverloadException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		
 	}
+		
+	}
+	private void copycollection(String destinationPath, String sourcePath) throws IdUnusedException, PermissionException, TypeException, IdUnusedException, IdLengthException, IdUsedException, IdUniquenessException, IdInvalidException, InUseException, InconsistentException, OverQuotaException, ServerOverloadException {
+		String id=sourcePath;
+		String new_id=destinationPath;
+		if (!id.endsWith("/"))
+			  id = id + "/";
+
+			if (!new_id.endsWith("/"))
+			  new_id = new_id + "/";
+
+
+			ContentCollection thisCollection = contentHostingService.getCollection(id);
+
+			List<String> members = thisCollection.getMembers();
+			 
+			ResourceProperties properties = thisCollection.getProperties();
+			ResourcePropertiesEdit newProps = duplicateResourceProperties(properties, thisCollection.getId());
+
+			String name = new_id;
+			if (name.endsWith("/"))
+			    name = name.substring(0, name.length()-1);
+			int i = name.lastIndexOf("/");
+			if (i >= 0)
+			    name = name.substring(i+1);
+			newProps.addProperty(ResourceProperties.PROP_DISPLAY_NAME, name);
+
+			contentHostingService.addCollection(new_id, newProps);
+
+			Iterator<String> memberIt = members.iterator();
+			while (memberIt.hasNext()) {
+			    String member_id = (String) memberIt.next();
+
+			    // this isn't perfect. It only protects the top two levels of directory
+			    if (!(member_id.toLowerCase().indexOf("/protected") >= 0 &&
+				  (!contentHostingService.allowAddCollection(sakaiDavHelper.adjustId(member_id)))))
+				contentHostingService.copyIntoFolder(member_id, new_id);
+			}
+		
+	}
+	@SuppressWarnings("unchecked")
+	private ResourcePropertiesEdit duplicateResourceProperties(ResourceProperties properties, String id) {
+
+	ResourcePropertiesEdit resourceProperties = contentHostingService.newResourceProperties();
+	try {
+
+	    if (properties == null) return resourceProperties;
+
+	    // loop throuh the properties
+	    Iterator<String> propertyNames = properties.getPropertyNames();
+	    while (propertyNames.hasNext()) {
+		String propertyName = propertyNames.next();
+		if (!propertyName.equals(ResourceProperties.PROP_DISPLAY_NAME))
+		    resourceProperties.addProperty(propertyName, properties.getProperty(propertyName));
+	    }
+
+	} catch (Exception e) {
+	    return resourceProperties;
+	}
+
+	return resourceProperties;
+
+
+    } // duplicateResourceProperties
+
 	/*
 	 * doDelete Method 
 	 * (non-Javadoc)
@@ -677,6 +806,9 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 		
 		return length;
 	}
+	public String getPath(){
+		return path;
+	}
 
 	public String getContentType(String arg0) {
 		// TODO Auto-generated method stub
@@ -688,7 +820,7 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 		return null;
 	}
 
-	public void sendContent(OutputStream arg0, Range arg1,
+	public void send(OutputStream arg0, Range arg1,
 			Map<String, String> params, String contentType) throws IOException,
 			NotAuthorizedException, BadRequestException {
 		// TODO Auto-generated method stub
@@ -731,6 +863,13 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 	public LockToken getCurrentLock() {
 			return resourceLocks.get(getUniqueId());
 		//return null;
+	}
+
+	public void sendContent(OutputStream out, Range range,
+			Map<String, String> params, String contentType) throws IOException,
+			NotAuthorizedException, BadRequestException {
+		// TODO Auto-generated method stub
+		
 	}
 
 }

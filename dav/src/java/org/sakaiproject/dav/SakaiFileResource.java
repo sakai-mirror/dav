@@ -29,10 +29,12 @@ public class SakaiFileResource implements FileResource,LockableResource{
 		this.path=path;
 	}
 
-	public void copyTo(CollectionResource arg0, String arg1)
+	public void copyTo(CollectionResource toCollection, String name)
 			throws NotAuthorizedException, BadRequestException,
 			ConflictException {
-		// TODO Auto-generated method stub
+		if(toCollection instanceof SakaiFileResource){
+			
+		}
 		
 	}
 

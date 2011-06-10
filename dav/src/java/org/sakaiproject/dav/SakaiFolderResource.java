@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Hashtable;
 import java.util.Iterator;
@@ -820,12 +821,7 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 		return null;
 	}
 
-	public void send(OutputStream arg0, Range arg1,
-			Map<String, String> params, String contentType) throws IOException,
-			NotAuthorizedException, BadRequestException {
-		// TODO Auto-generated method stub
-		
-	}
+	
 
 	public void moveTo(CollectionResource arg0, String arg1)
 			throws ConflictException, NotAuthorizedException,
@@ -868,8 +864,152 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 	public void sendContent(OutputStream out, Range range,
 			Map<String, String> params, String contentType) throws IOException,
 			NotAuthorizedException, BadRequestException {
-		// TODO Auto-generated method stub
 		
-	}
+		
+		if (sakaiDavHelper.prohibited(path))
+			return;
 
+		
+		
+
+		
+
+		try
+		{
+			ContentCollection x = contentHostingService.getCollection(sakaiDavHelper.adjustId(path));
+
+			
+
+			List<String> xl = x.getMembers();
+			Collections.sort(xl);
+			Iterator<String> xi = xl.iterator();
+
+			//res.setContentType("text/html; charset=UTF-8");
+			String webappRoot = ServerConfigurationService.getServerUrl();
+			String a="<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">"+
+			"<html><head>"+
+			"<link href=\"" + webappRoot
+					+ "/css/default.css\" type=\"text/css\" rel=\"stylesheet\" media=\"screen\" />"+
+			"<STYLE type=\"text/css\">"+
+			"<!--"+
+			"td {padding-right: .5em}"+
+			"-->"+
+			"</STYLE>"+
+			"</head><body>"+
+			"<div style=\"padding: 16px\">"+
+			"<h2>Contents of /dav" + path + "</h2>"+
+			"<table>";
+			byte[] stringByte = a.getBytes();
+			out.write(stringByte);
+
+			// show .. if not already there. we don't get aliases
+			// so this is
+			// /group/db5a4d0c-3dfd-4d10-8018-41db42ac7c8b/
+			// /user/hedrick/
+
+			int slashes = countSlashes(sakaiDavHelper.adjustId(path));
+
+			if (slashes > 3)
+			{
+				// go up a level
+				//String uplev = id.substring(0, id.length() - 1);
+				//uplev = uplev.substring(0, uplev.lastIndexOf('/') + 1);
+				String b="<tr><td><a href=\"..\">Up one level</a></td><td><b>Folder</b>" + "</td><td>" + "</td><td>"
+						+ "</td><td>" + "</td></tr>";
+				byte[] stringbyteb=b.getBytes();
+				out.write(stringbyteb);
+
+			}
+
+			while (xi.hasNext())
+			{
+				String xs = (String) xi.next();
+				String xss = xs.substring(sakaiDavHelper.adjustId(path).length());
+
+				if (xss.endsWith("/"))
+				{
+				    // we need to show show the trailing /, but escapeUrl blows if it's there
+				        xss = xss.substring(0, xss.length()-1);
+					if (/*doProtected
+							&&*/ xs.toLowerCase().indexOf("/protected") >= 0)
+					{
+						if (!contentHostingService.allowAddCollection(sakaiDavHelper.adjustId(xs)))
+						{
+							continue;
+						}
+					}
+					// note that we put back the trailing /
+					String c="<tr><td><a href=\"" + Validator.escapeUrl(xss) + "/\">" + Validator.escapeHtml(xss)
+							+ "</a></td><td><b>Folder</b>" + "</td><td>" + "</td><td>" + "</td><td>" + "</td></tr>";
+					byte[] stringbytec=c.getBytes();
+					out.write(stringbytec);
+				}
+				else
+					try
+					{
+						ContentResource nextres = contentHostingService.getResource(sakaiDavHelper.adjustId(xs));
+						ResourceProperties properties = nextres.getProperties();
+
+						long filesize = ((nextres.getContentLength() - 1) / 1024) + 1;
+						String createdBy = getUserPropertyDisplayName(properties, ResourceProperties.PROP_CREATOR);
+						Time modTime = properties.getTimeProperty(ResourceProperties.PROP_MODIFIED_DATE);
+						String modifiedTime = modTime.toStringLocalShortDate() + " " + modTime.toStringLocalShort();
+						String filetype = nextres.getContentType();
+						String e="<tr><td><a href=\"" + Validator.escapeUrl(xss) + "\">" + Validator.escapeHtml(xss)
+								+ "</a></td><td>" + filesize + "</td><td>" + createdBy + "</td><td>" + filetype + "</td><td>"
+								+ modifiedTime + "</td></tr>";
+						byte[] stringbytee=e.getBytes();
+						out.write(stringbytee);
+					}
+					catch (Throwable ignore)
+					{
+						String d="<tr><td><a href=\"" + Validator.escapeUrl(xss) + "\">" + Validator.escapeHtml(xss)
+								+ "</a></td><td>" + "</td><td>" + "</td><td>" + "</td><td>" + "</td></tr>";
+						byte[] stringbyted=d.getBytes();
+						out.write(stringbyted);
+
+					}
+			}
+		}
+		catch (Throwable ignore)
+		{
+		}
+		if (out != null){
+			String f="</table></div></body></html>";
+			byte[] stringbytef=f.getBytes();
+			out.write(stringbytef);
+		}
+	}
+	protected String getUserPropertyDisplayName(ResourceProperties props, String name)
+	{
+		String id = props.getProperty(name);
+		if (id != null)
+		{
+			try
+			{
+				User u = UserDirectoryService.getUser(id);
+				return u.getDisplayName();
+			}
+			catch (UserNotDefinedException e)
+			{
+				return id;
+			}
+		}
+
+		return "unknown";
+	}
+	protected int countSlashes(String s)
+	{
+		int count = 0;
+		int loc = s.indexOf('/');
+
+		while (loc >= 0)
+		{
+			count++;
+			loc++;
+			loc = s.indexOf('/', loc);
+		}
+
+		return count;
+	}
 }

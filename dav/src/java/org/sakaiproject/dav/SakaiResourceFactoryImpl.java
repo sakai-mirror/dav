@@ -30,17 +30,23 @@ import org.sakaiproject.util.StringUtil;
 
 
 public class SakaiResourceFactoryImpl implements ResourceFactory{
-	//Content hosting service
-	private ContentHostingService contentHostingService;
-	//private ContentCollection collection;
-	private SakaiDavHelper sakaiDavHelper;
+	private ContentHostingService contentHostingService;//content hosting service variable
+	private ContentCollection contentCollection;
+	private SakaiDavHelper sakaiDavHelper;//object containing all the helper methods this is for eliminating code reuse
+	private ContentResource contentResource;
 	public SakaiResourceFactoryImpl(){
 		super();
 		sakaiDavHelper=new SakaiDavHelper();
-		
 	}
-	//Logger
+	/**
+	 * Logger
+	 */
 	private static Log M_log = LogFactory.getLog(SakaiResourceFactoryImpl.class);
+	
+	/**
+	 * getResource returns an instance of either a fileResource or a FOlderresource or null based on the path 
+	 * in the URL .I think authentication is not handled here it is handled in the file and folder resource implementations respectively.
+	 */
 	public Resource getResource(String host, String path) {
 		if(sakaiDavHelper.prohibited(path)){
 			return null;
@@ -49,56 +55,49 @@ public class SakaiResourceFactoryImpl implements ResourceFactory{
 		try
 		{
 			ResourceProperties props;
-
-			//path = fixDirPathSAKAI(path);
-
-			// Do not allow access to /attachments
-
 			if (path.startsWith("/attachments"))
 			{
 				M_log.info("DirContextSAKAI.lookup - You do not have permission to view this area " + path);
-				//throw new NamingException();
 			}
-
 			props = contentHostingService.getProperties(sakaiDavHelper.adjustId(path));
-
 			isCollection = props.getBooleanProperty(ResourceProperties.PROP_IS_COLLECTION);
-
+			//Check if the path represents a collection if so return an instance of FolderResource 
+			//if not a collection return an instance of a FileResource
 			if (isCollection)
 			{
-				return new SakaiFolderResource(path);
+				contentCollection=contentHostingService.getCollection(path);
+				if (contentCollection==null)
+					return null;
+				return new SakaiFolderResource(contentCollection,path);
 			}
 			else{
-				return new SakaiFileResource(path);
+				if (contentResource==null)
+					return null;
+				contentResource=contentHostingService.getResource(path);
+				return new SakaiFileResource(contentResource,path);
 			}
 		}
 		catch (PermissionException e)
 		{
 			M_log.debug("DirContextSAKAI.lookup - You do not have permission to view this resource " + path);
-			//throw new NamingException();
+			return null;
 		}
 		catch (IdUnusedException e)
 		{
 			M_log.debug("DirContextSAKAI.lookup - This resource does not exist: " + path);
-			//throw new NamingException();
+			return null;
 		}
 		catch (EntityPropertyNotDefinedException e)
 		{
 			M_log.warn("DirContextSAKAI.lookup - This resource is empty: " + path);
-			//throw new NamingException();
+			return null;
 		}
 		catch (EntityPropertyTypeException e)
 		{
 			M_log.warn("DirContextSAKAI.lookup - This resource has a EntityPropertyTypeException exception: " + path);
-			//throw new NamingException();
+			return null;
 		} catch (TypeException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		
-		return null;
+			return null;
+		}	
 	}
-	
-	
-
 }

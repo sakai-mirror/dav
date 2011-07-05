@@ -1,3 +1,23 @@
+/**********************************************************************************
+ * $URL: https://source.sakaiproject.org/svn/dav/trunk/dav/src/java/org/sakaiproject/dav/DavServlet.java $
+ * $Id: DavServlet.java 76766 2010-04-27 16:13:42Z hedrick@rutgers.edu $
+ ***********************************************************************************
+ *
+ * Copyright (c) 2003, 2004, 2005, 2006, 2007, 2008, 2009 The Sakai Foundation
+ *
+ * Licensed under the Educational Community License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.osedu.org/licenses/ECL-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ **********************************************************************************/
 package org.sakaiproject.dav;
 
 //import SakaidavStatus;
@@ -100,6 +120,7 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 	private SakaiDavHelper sakaiDavHelper;
 	private String path;
 	private boolean readOnly;
+	private ContentCollection contentCollection;
 	ResourceProperties props;
 	
 	/* The Resource Properties */
@@ -125,15 +146,20 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 	 * Value : LockInfo
 	 */
 	private Hashtable<String,LockToken> resourceLocks = new Hashtable<String,LockToken>();//same as in dotcms
-
-	
-	public SakaiFolderResource(String path) throws PermissionException, IdUnusedException, EntityPropertyNotDefinedException, EntityPropertyTypeException, TypeException {
+	public SakaiFolderResource(ContentCollection contentCollection, String path) throws PermissionException, IdUnusedException, EntityPropertyNotDefinedException, EntityPropertyTypeException, TypeException {
 		this.path=path;
 		sakaiDavHelper=new SakaiDavHelper(path);
+		this.contentCollection=contentCollection;
 		getResourceInfo();
-
 	}
-	
+	/**
+	 *  Get the resource meta data
+	 * @throws PermissionException
+	 * @throws IdUnusedException
+	 * @throws EntityPropertyNotDefinedException
+	 * @throws EntityPropertyTypeException
+	 * @throws TypeException
+	 */
 	private void getResourceInfo() throws PermissionException, IdUnusedException, EntityPropertyNotDefinedException, EntityPropertyTypeException, TypeException{
 		props = contentHostingService.getProperties(sakaiDavHelper.adjustId(path));
 		Entity mbr;
@@ -163,6 +189,11 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 		creationDate = props.getTimeProperty(ResourceProperties.PROP_CREATION_DATE).getTime();
 		resourceLink = mbr.getUrl();
 	}
+	
+	/**
+	 * create a new collection
+	 * 
+	 */
 	public CollectionResource createCollection(String path)
 			throws NotAuthorizedException, ConflictException,
 			BadRequestException {
@@ -303,35 +334,78 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 	
 	
 	
+	/**
+	 * get the child resource
+	 */
 	
 	public Resource child(String arg0) {
 		// TODO Auto-generated method stub
 		return null;
 	}
-
+	/**
+	 * Get the Children of a Collection
+	 */
 	public List<? extends Resource> getChildren() {
 		ContentCollection collection;
-		// TODO Auto-generated method stub
 		try {
 			collection = contentHostingService.getCollection(sakaiDavHelper.adjustId(((HttpServletRequest) HttpManager.request()).getPathInfo()));
 		} catch (IdUnusedException e) {
-			// TODO Auto-generated catch block
-			//e.printStackTrace();
 			return null;
 		} catch (TypeException e) {
-			// TODO Auto-generated catch block
-			//e.printStackTrace();
 			return null;
 		} catch (PermissionException e) {
-			// TODO Auto-generated catch block
-			//e.printStackTrace();
 			return null;
 		}
 		ArrayList<Resource> children = new ArrayList<Resource>();
-		List<Resource> members = collection.getMemberResources();
-		for(Resource member:members){
-			children.add(member);
+		@SuppressWarnings("unchecked")
+		List<Entity> members = collection.getMemberResources();
+		for(Entity member:members){
+			if(member instanceof SakaiFolderResource){
+			SakaiFolderResource sfr = null;
+			try {
+				sfr = new SakaiFolderResource((ContentCollection)member,path);
+			} catch (PermissionException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (IdUnusedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (EntityPropertyNotDefinedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (EntityPropertyTypeException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (TypeException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			children.add(sfr);
+			}
+			else if (member instanceof SakaiFileResource){
+				SakaiFileResource sfir = null;
+				try {
+					sfir = new SakaiFileResource((ContentResource)member,path);
+				} catch (PermissionException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (IdUnusedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (EntityPropertyNotDefinedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (EntityPropertyTypeException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (TypeException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				children.add(sfir);
+			}
 		}
+		
 		return children;
 	}
 
@@ -826,8 +900,10 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 	public void moveTo(CollectionResource arg0, String arg1)
 			throws ConflictException, NotAuthorizedException,
 			BadRequestException {
-		// TODO Auto-generated method stub
-		
+		//check if the resource represented by the path is readonly
+		//check if its locked
+		//Copy the resource to the specified location
+		//delete the resource specified by this path
 	}
 
 	@SuppressWarnings("deprecation")

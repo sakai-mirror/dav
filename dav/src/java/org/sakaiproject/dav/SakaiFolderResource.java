@@ -900,6 +900,10 @@ public class SakaiFolderResource  implements FolderResource,LockableResource{
 	public void moveTo(CollectionResource arg0, String arg1)
 			throws ConflictException, NotAuthorizedException,
 			BadRequestException {
+			if(collection instanceof SakaiFolderResource){
+			//now we copy the resource 
+			copyTo(collection,arg1);// use the same copy method 
+			}
 		//check if the resource represented by the path is readonly
 		//check if its locked
 		//Copy the resource to the specified location

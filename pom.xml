@@ -12,6 +12,10 @@
   <artifactId>dav-base</artifactId>
   <version>2.9-SNAPSHOT</version>
   <packaging>pom</packaging>
+  <!-- Overridding tomcat version for 2.9.x -->
+  <properties>
+      <sakai.tomcat.version>7.0.39</sakai.tomcat.version>
+  </properties>
   <scm>
     <connection>scm:svn:https://source.sakaiproject.org/svn/dav/branches/sakai-2.9.x</connection>
     <developerConnection>scm:svn:https://source.sakaiproject.org/svn/dav/branches/sakai-2.9.x</developerConnection>

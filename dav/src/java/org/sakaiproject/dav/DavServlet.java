@@ -269,6 +269,11 @@ public class DavServlet extends HttpServlet
 	 * Size of buffer for streaming downloads 
 	 */
 	protected static final int STREAM_BUFFER_SIZE = 102400;
+	
+	/**
+	 *  Max Size for xml property streams 4K 
+	 */
+	protected static final int MAX_XML_STREAM_LENGTH = 4096;
 
         // can be called on id with or withing adjustid, since
         // the prefixes we check for are not adjusted
@@ -2015,8 +2020,13 @@ public class DavServlet extends HttpServlet
 		// It is strongly discouraged by the spec.
 
 		int contentLength = req.getContentLength();
-
-		if (contentLength > 0)
+		
+		if (contentLength > MAX_XML_STREAM_LENGTH)
+		{
+			resp.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+			return;				
+		}
+		else if (contentLength > 0)
 		{
 
 			byte[] byteContent = new byte[contentLength];
@@ -2311,7 +2321,12 @@ public class DavServlet extends HttpServlet
 	    Hashtable<String,String> spaces = new Hashtable<String, String>();
 
 	    // read the xml document
-	    if (contentLength > 0) {
+	    if (contentLength > MAX_XML_STREAM_LENGTH)
+		{
+			resp.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE );
+			return;				
+		}
+		else if (contentLength > 0) {
 
 		byte[] byteContent = new byte[contentLength];
 		InputStream inputStream = req.getInputStream();

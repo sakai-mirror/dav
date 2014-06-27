@@ -1590,6 +1590,7 @@ public class DavServlet extends HttpServlet
 		    if (header.toUpperCase().contains(agent.toUpperCase())) {
 		        if (M_log.isInfoEnabled()) M_log.info("Redirecting DAV access because this is a browser." + header);
 		        resp.sendRedirect("/access/content" + adjustId(path));
+		        return;
 		    }
 		}
 
